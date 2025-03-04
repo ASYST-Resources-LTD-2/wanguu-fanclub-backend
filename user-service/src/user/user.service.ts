@@ -1,7 +1,7 @@
 // src/user/user.service.ts
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, set, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
 import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
@@ -21,6 +21,8 @@ export class UserService {
       realmName: process.env.KEYCLOAK_REALM || 'FanClubRealm',
     });
   }
+
+  
 
   async onModuleInit(){
     await this.kafkaClient.connect();
@@ -103,72 +105,88 @@ export class UserService {
   }
 
   async authenticateUser(username: string, password: string): Promise<any> {
-    try {
-      // Request token from Keycloak using password grant type
-      const tokenResponse = await fetch(
-        `${process.env.KEYCLOAK_URL || 'http://localhost:8080'}/realms/${
-          process.env.KEYCLOAK_REALM || 'FanClubRealm'
-        }/protocol/openid-connect/token`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'password',
-            client_id: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-            client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
-            username,
-            password,
-          }).toString(),
-        },
-      );
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
 
-      // Check if the response is successful
-      if (!tokenResponse.ok) {
-        const errorData = await tokenResponse.json();
-        console.error('Keycloak authentication failed:', errorData);
-        throw new Error(`Authentication failed: ${errorData.error_description }`);
-      }
+    const controller = new AbortController();
+    const signal = controller.signal;
 
-      const tokenData = await tokenResponse.json();
-      console.log('Token received from Keycloak:', tokenData);
+    setTimeout(() => {
+        controller.abort();
+    }, 5000);
 
-      // Calculate token expiration times
-      const accessTokenExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
-      const refreshTokenExpiresAt = tokenData.refresh_expires_in
-        ? new Date(Date.now() + tokenData.refresh_expires_in * 1000)
-        : undefined;
+    while (attempt < maxRetries) {
+        try {
+            const tokenResponse = await fetch(
+                `${process.env.KEYCLOAK_URL || 'http://localhost:8080'}/realms/${
+                    process.env.KEYCLOAK_REALM || 'FanClubRealm'
+                }/protocol/openid-connect/token`,
+                {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Connection': 'keep-alive'
+                    },
+                    body: new URLSearchParams({
+                        grant_type: 'password',
+                        client_id: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+                        client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+                        username,
+                        password,
+                    }).toString(),
+                    signal,// 5 second timeout
+                },
+            );
 
-      // Find user in MongoDB
-      let user = await this.userModel.findOne({ username }).exec();
-      if (!user) {
-        console.log(`User ${username} not found in MongoDB`);
-        throw new Error('User not found in database');
-      }
+            if (!tokenResponse.ok) {
+                const errorData = await tokenResponse.json();
+                // Don't retry on authentication failures
+                if (errorData.error === 'invalid_grant') {
+                    throw new Error(`Authentication failed: ${errorData.error_description}`);
+                }
+                throw new Error(`Request failed: ${errorData.error_description}`);
+            }
 
-      // Update user with token details
-      user.keycloakData = {
-        ...user.keycloakData,
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        idToken: tokenData.id_token,
-        tokenExpiresAt: accessTokenExpiresAt,
-        refreshTokenExpiresAt: refreshTokenExpiresAt,
-      };
+            // Rest of your successful authentication logic...
+            const tokenData = await tokenResponse.json();
+            const user = await this.userModel.findOne({ username }).exec();
+            if (!user) {
+                throw new Error('User not found in database');
+            }
 
-      await user.save();
-      console.log('User updated in MongoDB with token data:', user);
+            // If we get here, authentication succeeded
+            return {
+                mongoUser: user,
+                tokens: tokenData,
+                status: 'success',
+                message: 'User authenticated successfully',
+            };
 
-      return {
-        mongoUser: user,
-        tokens: tokenData,
-        status: 'success',
-        message: 'User authenticated successfully',
-      };
-    } catch (error) {
-      console.error('Error in authenticateUser:', error.message);
-      throw error;
+        } catch (error) {
+            lastError = error;
+            
+            // Only retry on network-related errors
+            if (error.name === 'TypeError' || error.message.includes('network') || error.message.includes('timeout')) {
+                attempt++;
+                if (attempt < maxRetries) {
+                    // Exponential backoff: 1s, 2s, 4s
+                    const backoffTime = Math.pow(2, attempt - 1) * 1000;
+                    console.log(`Retry attempt ${attempt} after ${backoffTime}ms`);
+                    await new Promise(resolve => setTimeout(resolve, backoffTime));
+                    continue;
+                }
+            } else {
+                // Non-network errors should not retry
+                break;
+            }
+        }
     }
-  }
+
+    // If we get here, all retries failed
+    throw new Error(`Authentication failed after ${attempt} attempts. Last error: ${lastError.message}`);
+}
+
 
   async  upgradeMembership(
     userId: string,

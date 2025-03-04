@@ -19,11 +19,25 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
       transport: Transport.KAFKA,
       options: {
         client: {
-          clientId: 'user-service',
-          brokers: ['localhost:9092'], 
+          clientId: 'user-service-client',
+          brokers: ['localhost:9092'],
+          connectionTimeout: 5000,
+          retry: {
+            initialRetryTime: 300,
+            retries: 10,
+            maxRetryTime: 30000
+          }
         },
         consumer: {
-          groupId: 'user-consumer'
+          groupId: 'user-consumer',
+          sessionTimeout: 45000,
+          heartbeatInterval: 15000,
+          rebalanceTimeout: 60000,
+          allowAutoTopicCreation: true
+        },
+        producer: {
+          allowAutoTopicCreation: true,
+          idempotent: true
         }
       }
     }

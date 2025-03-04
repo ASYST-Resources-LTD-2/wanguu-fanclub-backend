@@ -4,6 +4,7 @@ import { UserModule } from './user/user.module';
 import { KeycloakModule } from './keycloak/keycloak.module';
 import { User, UserSchema } from './user/schemas/user.schema';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { Partitioners } from 'kafkajs';
 
 @Module({
   imports: [
@@ -16,13 +17,30 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
         {
           name: 'KAFKA_SERVICE',
           transport: Transport.KAFKA,
-          options:{
+          options: {
             client: {
-              clientId: 'nestjs-kafka',
+              clientId: 'user-service-client',
               brokers: ['localhost:9092'],
+              connectionTimeout: 5000,
+              retry: {
+                initialRetryTime: 300,
+                retries: 10,
+                maxRetryTime: 30000
+              }
             },
-          },
-        },
+            consumer: {
+              groupId: 'user-consumer',
+              sessionTimeout: 45000,
+              heartbeatInterval: 15000,
+              rebalanceTimeout: 60000,
+              allowAutoTopicCreation: true
+            },
+            producer: {
+              allowAutoTopicCreation: true,
+              idempotent: true
+            }
+          }
+        }
       ]),
     UserModule,
     KeycloakModule,
