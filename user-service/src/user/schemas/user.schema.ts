@@ -22,7 +22,7 @@ export class User {
 
   @Prop({
     type: String,
-    enum: ['USER', 'PREMIUM_USER', 'ADMIN', 'TEAM_GESTIONNAIRE']
+    enum: ['USER', 'PREMIUM_USER', 'ADMIN', 'TEAM_GESTIONNAIRE','default-roles-fanclubrealm']
   })
   role: string
 

@@ -6,6 +6,7 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { Membership, MembershipSchema } from 'src/membership/schemas/membership.schema';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { KeycloakModule } from 'src/keycloak/keycloak.module';
 
 @Module({
   imports: [MongooseModule.forFeature([
@@ -41,7 +42,8 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
         }
       }
     }
-  ])
+  ]),
+  KeycloakModule,
 ],
   controllers: [UserController],
   providers: [UserService],

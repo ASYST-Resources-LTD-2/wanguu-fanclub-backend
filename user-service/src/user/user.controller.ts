@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Headers, Request } from '@nestjs/common';
 import { UserService } from './user.service';
-import { Resource, Roles, Unprotected } from 'nest-keycloak-connect';
+import { Resource, RoleGuard, Roles, Unprotected, AuthGuard, Scopes} from 'nest-keycloak-connect';
+import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
 
 @Controller('users')
 @Resource('users')
@@ -24,11 +25,15 @@ export class UserController {
   }
 
   @Post('upgrade')
+  @UseGuards(AuthGuard) // Add this to enforce token validation
+  @Scopes('profile email')
   @Roles({ roles: ['USER'] })
   async upgradeMembership(
+    @Headers('authorization') authorizationHeader: string,
     @Body() body: { userId: string; plan: { price: number; duration: string; startDate: Date; endDate: Date } },
   ) {
-    return this.userService.upgradeMembership(body.userId, body.plan);
+    const token = authorizationHeader.split(' ')[1];
+    return this.userService.upgradeMembership(body.userId, body.plan, token);
   }
 
   @Post('assign-gestionnaire')
