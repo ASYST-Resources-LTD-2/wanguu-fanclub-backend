@@ -1,19 +1,29 @@
 // src/user/user.service.ts
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { User, UserDocument } from './user.schema';
+import { Model, Types } from 'mongoose';
+import { User, UserDocument } from './schemas/user.schema';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
+import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
+import { ClientKafka } from '@nestjs/microservices';
 
 @Injectable()
 export class UserService {
   private keycloakAdmin: KeycloakAdminClient;
 
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Membership.name) private membershipModel: Model<MembershipDocument>,
+    @Inject('KAFKA_SERVICE') private kafkaClient: ClientKafka,
+) {
     this.keycloakAdmin = new KeycloakAdminClient({
       baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8080',
       realmName: process.env.KEYCLOAK_REALM || 'FanClubRealm',
     });
+  }
+
+  async onModuleInit(){
+    await this.kafkaClient.connect();
   }
 
   async createUser(username: string, email: string, password: string): Promise<any> {
@@ -33,6 +43,7 @@ export class UserService {
         enabled: true,
         credentials: [{ type: 'password', value: password, temporary: false }],
         emailVerified: true,
+        realmRoles: ['USER'],
       });
       console.log('User created in Keycloak:', keycloakUser);
 
@@ -47,6 +58,7 @@ export class UserService {
       const createdUser = new this.userModel({
         username,
         email,
+        role: 'USER',
         keycloakData: {
           keycloakId: keycloakUser.id,
         },
@@ -55,6 +67,19 @@ export class UserService {
       });
       const savedUser = await createdUser.save();
       console.log('User saved in MongoDB:', savedUser);
+
+      const membership = new this.membershipModel({
+        userId: savedUser._id as Types.ObjectId,
+        membershipType: 'FREE',
+      });
+      await membership.save();
+
+      this.kafkaClient.emit('UserCreated', {
+        username,
+        email,
+        userId: savedUser._id
+
+      });
 
       return {
         mongoUser: savedUser,
@@ -101,7 +126,7 @@ export class UserService {
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json();
         console.error('Keycloak authentication failed:', errorData);
-        throw new Error(`Authentication failed: ${errorData.error_description || 'Unknown error'}`);
+        throw new Error(`Authentication failed: ${errorData.error_description }`);
       }
 
       const tokenData = await tokenResponse.json();
@@ -144,4 +169,77 @@ export class UserService {
       throw error;
     }
   }
+
+  async  upgradeMembership(
+    userId: string,
+    plan: {price: number; duration: string; startDate: Date; endDate: Date},
+  ): Promise<any>{
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new Error('User not found');
+    }
+    const membership = await this.membershipModel.findOne({ userId: userId }).exec();
+    if(membership){
+      membership.membershipType = 'PREMIUM';
+      membership.upgradeDate = new Date(Date.now());
+      membership.subscriptionPlan = {...plan, isActive: true};
+      await membership.save();
+    }
+
+    await this.keycloakAdmin.auth({
+      grantType: 'client_credentials',
+      clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+    });
+    await this.keycloakAdmin.users.addRealmRoleMappings({
+      id: user.keycloakData.keycloakId,
+      roles: [{ id: 'PREMIUM_USER', name: 'PREMIUM_USER' }],
+    });
+
+    user.role = 'PREMIUM_USER';
+    await user.save();
+
+    this.kafkaClient.emit('membership-upgraded',{
+      userId: userId.toString(),
+      membershipType: 'PREMIUM',
+      
+    });
+
+    return { status: 'success', message: 'Membership upgraded to PREMIUM' };
+
+  }
+
+  async assignGestionnaireRole(userId: string, teamId: string): Promise<any>{
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new Error('User not found');
+    }
+    await this.keycloakAdmin.auth({
+      grantType: 'client_credentials',
+      clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+    });
+    await this.keycloakAdmin.users.addRealmRoleMappings({
+      id: user.keycloakData.keycloakId,
+      roles: [{ id: 'TEAM_GESTIONNAIRE', name: 'TEAM_GESTIONNAIRE' }],
+    });
+  user.role = 'TEAM_GESTIONNAIRE';
+  user.teamId = new Types.ObjectId(teamId);
+  await user.save();
+
+  this.kafkaClient.emit('role-assigned',{
+    userId: user._id,
+    role: 'TEAM_GESTIONNAIRE'
+  });
+  return { status: 'success', message: 'Gestionnaire role assigned' };
+  }
+
+  
+
+
+
+
+
 }

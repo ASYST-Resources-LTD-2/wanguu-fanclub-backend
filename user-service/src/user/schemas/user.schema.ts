@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type UserDocument = User & Document;
 
@@ -12,13 +12,22 @@ export class User {
   email: string;
 
   @Prop({ required: false }) // Password is managed by Keycloak; not stored here
-  password: string;
+  password?: string;
+
+  @Prop({ type: [Types.ObjectId], ref: 'Sport', default: [] })
+  selectedSports: Types.ObjectId[];
 
   @Prop({ type: [String], default: [] })
-  selectedSports: string[];
+  teamIds: Types.ObjectId[];
 
-  @Prop({ type: [String], default: [] })
-  teamIds: string[];
+  @Prop({
+    type: String,
+    enum: ['USER', 'PREMIUM_USER', 'ADMIN', 'TEAM_GESTIONNAIRE']
+  })
+  role: string
+
+  @Prop({ type: Types.ObjectId, ref: 'Team', default: null })
+  teamId?: Types.ObjectId | null;
 
   @Prop({ type: Object, default: null }) // Store Keycloak user ID and tokens
   keycloakData: {
