@@ -108,14 +108,14 @@ export class UserService {
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
-
+  
     const controller = new AbortController();
     const signal = controller.signal;
-
+  
     setTimeout(() => {
         controller.abort();
     }, 5000);
-
+  
     while (attempt < maxRetries) {
         try {
             const tokenResponse = await fetch(
@@ -135,26 +135,31 @@ export class UserService {
                         username,
                         password,
                     }).toString(),
-                    signal,// 5 second timeout
+                    signal,
                 },
             );
-
+  
             if (!tokenResponse.ok) {
                 const errorData = await tokenResponse.json();
-                // Don't retry on authentication failures
                 if (errorData.error === 'invalid_grant') {
+                    // Invalid credentials, don't retry
                     throw new Error(`Authentication failed: ${errorData.error_description}`);
+                } else if (errorData.error === 'unauthorized_client') {
+                    // Invalid client credentials, don't retry
+                    throw new Error(`Authentication failed: ${errorData.error_description}`);
+                } else {
+                    // Other errors, retry
+                    throw new Error(`Request failed: ${errorData.error_description}`);
                 }
-                throw new Error(`Request failed: ${errorData.error_description}`);
             }
-
+  
             // Rest of your successful authentication logic...
             const tokenData = await tokenResponse.json();
             const user = await this.userModel.findOne({ username }).exec();
             if (!user) {
                 throw new Error('User not found in database');
             }
-
+  
             // If we get here, authentication succeeded
             return {
                 mongoUser: user,
@@ -162,12 +167,11 @@ export class UserService {
                 status: 'success',
                 message: 'User authenticated successfully',
             };
-
+  
         } catch (error) {
             lastError = error;
-            
-            // Only retry on network-related errors
-            if (error.name === 'TypeError' || error.message.includes('network') || error.message.includes('timeout')) {
+            if (error.code === 'ECONNRESET' || error.message.includes('ECONNRESET')) {
+                // Retry on ECONNRESET errors
                 attempt++;
                 if (attempt < maxRetries) {
                     // Exponential backoff: 1s, 2s, 4s
@@ -177,15 +181,15 @@ export class UserService {
                     continue;
                 }
             } else {
-                // Non-network errors should not retry
+                // Non-ECONNRESET errors, don't retry
                 break;
             }
         }
     }
-
+  
     // If we get here, all retries failed
     throw new Error(`Authentication failed after ${attempt} attempts. Last error: ${lastError.message}`);
-}
+  }
 
 
   async  upgradeMembership(
