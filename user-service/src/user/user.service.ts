@@ -270,10 +270,16 @@ export class UserService {
 
 
   async upgradeMembership(
-    userId: string,
+    userId: string, // Keycloak UUID
     plan: { price: number; duration: string; startDate: Date; endDate: Date },
     token: string,
 ): Promise<any> {
+    // Find user by Keycloak ID
+    const user = await this.userModel.findOne({ 'keycloakData.keycloakId': userId });
+    if (!user) {
+        throw new Error('User not found');
+    }
+
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
@@ -293,47 +299,104 @@ export class UserService {
                     {
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'Connection': 'keep-alive'
+                            'Connection': 'keep-alive',
                         },
-                        timeout: 5000
+                        timeout: 5000,
                     },
                 ),
             );
 
-            // Rest of your existing implementation...
             const tokenData = introspectionResponse.data;
             if (!tokenData.active) {
                 throw new Error('Invalid or expired token');
             }
 
-            // All the existing steps remain the same...
-            // Step 2 through Step 11 stay unchanged
+            // Step 2: Authenticate Keycloak admin client
+            await this.keycloakAdmin.auth({
+                grantType: 'client_credentials',
+                clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+                clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+            });
 
-            return { status: 'success', message: 'Membership upgraded to PREMIUM' };
+            // Step 3: Fetch the client ID for "fanclub-user-membership"
+            const clients = await this.keycloakAdmin.clients.find({
+                clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+            });
+            if (!clients || clients.length === 0 || !clients[0].id) {
+                throw new Error('Client not found in Keycloak');
+            }
+            const clientId: string = clients[0].id; // Type assertion or guaranteed by check above
 
+            // Step 4: Fetch the "PREMIUM_USER" role from the client
+            const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+            const premiumRole = roles.find(role => role.name === 'PREMIUM_USER');
+            if (!premiumRole || !premiumRole.id || !premiumRole.name) {
+                throw new Error('PREMIUM_USER role not found in client or missing required properties');
+            }
+
+            // Step 5: Assign the "PREMIUM_USER" client role in Keycloak
+            await this.keycloakAdmin.users.addClientRoleMappings({
+                id: userId, // Keycloak UUID
+                clientUniqueId: clientId,
+                roles: [{ id: premiumRole.id, name: premiumRole.name }], // Now guaranteed to be strings
+            });
+
+            // Step 6: Update membership in MongoDB using user._id
+            const membership = await this.membershipModel.findOneAndUpdate(
+                { userId: user._id },
+                {
+                    membershipType: 'PREMIUM',
+                    upgradeDate: new Date(),
+                    subscriptionPlan: { ...plan, isActive: true },
+                },
+                { new: true },
+            );
+
+            if (!membership) {
+                throw new Error('Membership not found');
+            }
+
+            // Step 7: Update user role in MongoDB
+            await this.userModel.findByIdAndUpdate(user._id, {
+                role: 'PREMIUM_USER',
+            });
+
+            // Step 8: Emit Kafka event with MongoDB ID
+            this.kafkaClient.emit('membership-upgraded', {
+                userId: user._id as Types.ObjectId,
+                membershipType: 'PREMIUM',
+            });
+
+            return {
+                status: 'success',
+                message: 'Membership upgraded to PREMIUM',
+                userId: user._id,
+                keycloakId: userId,
+            };
         } catch (error) {
             lastError = error;
-            
-            if (error.code === 'ECONNRESET' || 
+
+            if (
+                error.code === 'ECONNRESET' ||
                 error.message.includes('ECONNRESET') ||
                 error.code === 'ETIMEDOUT' ||
-                error.code === 'ECONNREFUSED') {
-                
+                error.code === 'ECONNREFUSED'
+            ) {
                 attempt++;
                 if (attempt < maxRetries) {
-                    const backoffTime = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
+                    const backoffTime = Math.pow(2, attempt - 1) * 1000;
                     console.log(`Retry attempt ${attempt} for membership upgrade after ${backoffTime}ms`);
                     await new Promise(resolve => setTimeout(resolve, backoffTime));
                     continue;
                 }
             }
-            
-            // If it's not a connection error or we've exhausted retries, throw the error
+
             console.error('Error upgrading membership:', error.message);
             throw new Error(`Membership upgrade failed after ${attempt} attempts. Error: ${lastError.message}`);
         }
     }
 }
+
 
 
 
