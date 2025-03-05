@@ -32,109 +32,148 @@ export class UserService {
     await this.kafkaClient.connect();
   }
   async createUser(username: string, email: string, password: string): Promise<any> {
-    try {
-      await this.keycloakAdmin.auth({
-        grantType: 'client_credentials',
-        clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-        clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
-      });
-      console.log('Successfully authenticated with Keycloak');
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
+    let keycloakUser: { id?: string } | null = null;
   
-      const keycloakUser = await this.keycloakAdmin.users.create({
-        username,
-        email,
-        enabled: true,
-        credentials: [{ type: 'password', value: password, temporary: false }],
-        emailVerified: true,
-      });
-      console.log('User created in Keycloak:', keycloakUser);
-
-      // Get and remove default realm roles
-      const realmRoles = await this.keycloakAdmin.users.listRealmRoleMappings({
-        id: keycloakUser.id ?? '',
-      });
-      
-      if (realmRoles.length > 0) {
-        await this.keycloakAdmin.users.delRealmRoleMappings({
-          id: keycloakUser.id ?? '',
-          roles: realmRoles.map(role => ({ id: role.id ?? '',  name: role.name ?? ''  })),
+    while (attempt < maxRetries) {
+      try {
+        // Check for existing user in MongoDB
+        const existingUser = await this.userModel.findOne({ 
+          $or: [{ username }, { email }] 
+        }).exec();
+        if (existingUser) {
+          throw new Error('User already exists in MongoDB');
+        }
+  
+        // Authenticate Keycloak admin client
+        await this.keycloakAdmin.auth({
+          grantType: 'client_credentials',
+          clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+          clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
         });
+  
+        // Check for existing user in Keycloak
+        const existingKeycloakUsers = await this.keycloakAdmin.users.find({
+          username: username,
+          email: email
+        });
+        if (existingKeycloakUsers.length > 0) {
+          throw new Error('User already exists in Keycloak');
+        }
+  
+        // Create user in Keycloak
+        const createdKeycloakUser = await this.keycloakAdmin.users.create({
+          username,
+          email,
+          enabled: true,
+          credentials: [{ type: 'password', value: password, temporary: false }],
+          emailVerified: true,
+        });
+        keycloakUser = createdKeycloakUser;
+  
+        if (!keycloakUser?.id) {
+          throw new Error('Failed to create Keycloak user');
+        }
+  
+        // Optional: Remove existing realm roles if needed
+        const realmRoles = await this.keycloakAdmin.users.listRealmRoleMappings({
+          id: keycloakUser.id,
+        });
+        if (realmRoles.length > 0) {
+          await this.keycloakAdmin.users.delRealmRoleMappings({
+            id: keycloakUser.id,
+            roles: realmRoles.map(role => ({ id: role.id ?? '', name: role.name ?? '' })),
+          });
+        }
+  
+        // Fetch the "fanclub-user-membership" client
+        const client = await this.keycloakAdmin.clients.find({
+          clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+        });
+        if (!client?.[0]?.id) {
+          throw new Error('Client not found in Keycloak');
+        }
+        const clientId = client[0].id;
+  
+        // Fetch the "USER" role from the client
+        const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+        const userRole = roles.find(role => role.name === 'USER');
+        if (!userRole) {
+          if (keycloakUser.id) {
+            await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+          }
+          throw new Error('Role "USER" not found in client');
+        }
+  
+        // Assign the "USER" role to the user in Keycloak
+        await this.keycloakAdmin.users.addClientRoleMappings({
+          id: keycloakUser.id,
+          clientUniqueId: clientId,
+          roles: [{ id: userRole.id ?? '', name: userRole.name ?? '' }],
+        });
+  
+        // Create user in MongoDB
+        const createdUser = new this.userModel({
+          username,
+          email,
+          role: userRole.name,
+          keycloakData: {
+            keycloakId: keycloakUser.id,
+          },
+          selectedSports: [],
+          teamIds: [],
+        });
+        const savedUser = await createdUser.save();
+  
+        // Create membership in MongoDB
+        const membership = new this.membershipModel({
+          userId: savedUser._id as Types.ObjectId,
+          membershipType: 'FREE',
+        });
+        await membership.save();
+  
+        // Emit Kafka event
+        this.kafkaClient.emit('UserCreated', {
+          username,
+          email,
+          userId: savedUser._id,
+        });
+  
+        return {
+          mongoUser: savedUser,
+          keycloakUser,
+          keycloakUserRole: userRole.name,
+          status: 'success',
+          message: 'User created successfully',
+        };
+  
+      } catch (error) {
+        lastError = error;
+        // Rollback: Delete Keycloak user if subsequent steps fail
+        if (keycloakUser?.id) {
+          try {
+            await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+          } catch (deleteError) {
+            console.error('Failed to delete Keycloak user on error:', deleteError);
+          }
+        }
+        if (error.code === 'ECONNRESET' || error.message.includes('ECONNRESET')) {
+          attempt++;
+          if (attempt < maxRetries) {
+            const backoffTime = Math.pow(2, attempt - 1) * 1000;
+            console.log(`Retry attempt ${attempt} after ${backoffTime}ms`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+            continue;
+          }
+        }
+        throw new Error(`User creation failed after ${attempt} attempts. Error: ${lastError.message}`);
       }
-  
-      const client = await this.keycloakAdmin.clients.find({
-        clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-      });
-      if (!client || client.length === 0) {
-        throw new Error('Client not found in Keycloak');
-      }
-      const clientId = client[0].id;
-      if (!clientId) {
-        throw new Error('Client ID is missing');
-      }
-  
-      const roles = await this.keycloakAdmin.clients.listRoles({
-        id: clientId,
-      });
-      const userRole = roles.find(role => role.name === 'USER');
-      if (!userRole) {
-        throw new Error('Role "USER" not found in client');
-      }
-  
-      await this.keycloakAdmin.users.addClientRoleMappings({
-        id: keycloakUser.id ?? '',
-        clientUniqueId: clientId,
-        roles: [{ id: userRole.id ?? '', name: userRole.name ?? '' }],
-      });
-      console.log('Assigned "USER" client role to the user');
-  
-      const clientRoles = await this.keycloakAdmin.users.listClientRoleMappings({
-        id: keycloakUser.id ?? '',
-        clientUniqueId: clientId
-      });
-      console.log('Keycloak client roles:', clientRoles);
-  
-      const createdUser = new this.userModel({
-        username,
-        email,
-        role: userRole.name,
-        keycloakData: {
-          keycloakId: keycloakUser.id,
-        },
-        selectedSports: [],
-        teamIds: [],
-      });
-      const savedUser = await createdUser.save();
-      console.log('User saved in MongoDB:', savedUser);
-  
-      const membership = new this.membershipModel({
-        userId: savedUser._id as Types.ObjectId,
-        membershipType: 'FREE',
-      });
-      await membership.save();
-  
-      this.kafkaClient.emit('UserCreated', {
-        username,
-        email,
-        userId: savedUser._id,
-      });
-  
-      return {
-        mongoUser: savedUser,
-        keycloakUser: keycloakUser,
-        keycloakUserRole: userRole.name,
-        status: 'success',
-        message: 'User created successfully',
-      };
-    } catch (error) {
-      console.error('Error in createUser:', error);
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error('Keycloak server is not available');
-      } else if (error.response?.status === 403) {
-        throw new Error('Forbidden: Check Keycloak client permissions');
-      }
-      throw error;
     }
   }
+  
+  
 
   
 
@@ -309,27 +348,39 @@ export class UserService {
       }
   
       // Step 8: Update or create membership
-      if (membership) {
-        membership.membershipType = 'PREMIUM';
-        membership.upgradeDate = new Date();
-        membership.subscriptionPlan = { ...plan, isActive: true };
-        await membership.save();
-      } else {
-        const newMembership = new this.membershipModel({
-          userId: user._id,
-          membershipType: 'PREMIUM',
-          upgradeDate: new Date(),
-          subscriptionPlan: { ...plan, isActive: true },
-        });
-        await newMembership.save();
-      }
-  
-      // Step 9: Add PREMIUM_USER client role to user
-      await this.keycloakAdmin.users.addClientRoleMappings({
-        id: user.keycloakData.keycloakId,
-        clientUniqueId: clientId,
-        roles: [{ id: premiumRole.id, name: premiumRole.name ?? '' }],
-      });
+if (membership) {
+  membership.membershipType = 'PREMIUM';
+  membership.upgradeDate = new Date();
+  membership.subscriptionPlan = { ...plan, isActive: true };
+  await membership.save();
+} else {
+  const newMembership = new this.membershipModel({
+    userId: user._id,
+    membershipType: 'PREMIUM',
+    upgradeDate: new Date(),
+    subscriptionPlan: { ...plan, isActive: true },
+  });
+  await newMembership.save();
+}
+
+// Step 9: Remove previous USER role and add PREMIUM_USER client role to user
+const previousRoles = await this.keycloakAdmin.users.listClientRoleMappings({
+  id: user.keycloakData.keycloakId,
+  clientUniqueId: clientId,
+});
+const previousUserRole = previousRoles.find(role => role.name === 'USER');
+if (previousUserRole) {
+  await this.keycloakAdmin.users.delClientRoleMappings({
+    id: user.keycloakData.keycloakId,
+    clientUniqueId: clientId,
+    roles: [{ id: previousUserRole.id ?? '', name: previousUserRole.name ?? '' }],
+  });
+}
+await this.keycloakAdmin.users.addClientRoleMappings({
+  id: user.keycloakData.keycloakId,
+  clientUniqueId: clientId,
+  roles: [{ id: premiumRole.id, name: premiumRole.name ?? '' }],
+});
   
       // Step 10: Update local user role
       user.role = 'PREMIUM_USER';
