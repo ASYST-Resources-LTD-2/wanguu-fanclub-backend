@@ -7,6 +7,7 @@ import { UserController } from './user.controller';
 import { Membership, MembershipSchema } from 'src/membership/schemas/membership.schema';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KeycloakModule } from 'src/keycloak/keycloak.module';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [MongooseModule.forFeature([
@@ -14,6 +15,7 @@ import { KeycloakModule } from 'src/keycloak/keycloak.module';
     {name: Membership.name, schema:MembershipSchema}
 
   ]),
+  HttpModule,
   ClientsModule.register([
     {
       name: 'KAFKA_SERVICE',
