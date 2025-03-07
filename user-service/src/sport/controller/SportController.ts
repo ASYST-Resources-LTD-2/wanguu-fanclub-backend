@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Get, Param, UseGuards,  } from '@nestjs/common';
-import { AuthGuard, Roles } from 'nest-keycloak-connect';
+import { AuthGuard, Resource, Roles } from 'nest-keycloak-connect';
 import { SportService } from '../SportService';
 
 @Controller('sports')
@@ -8,6 +8,7 @@ export class SportController {
 
   @Post()
   @UseGuards(AuthGuard)
+  // @Resource('users')
   @Roles({ roles: ['ADMIN'] }) // Only admins can create sports
   async createSport(@Body() body: { name: string; categoryId: string }) {
     return this.sportService.createSport(body.name, body.categoryId);

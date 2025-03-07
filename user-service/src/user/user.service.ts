@@ -603,7 +603,7 @@ async upgradeMembership(
     throw new Error('User not found');
   }
 
-  const maxRetries = 3;
+  const maxRetries = 5;
   let attempt = 0;
   let lastError;
 
