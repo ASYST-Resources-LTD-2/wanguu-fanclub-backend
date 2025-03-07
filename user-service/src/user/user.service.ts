@@ -459,132 +459,269 @@ export class UserService {
   }
 
 
-  async upgradeMembership(
-    userId: string, // Keycloak UUID
-    plan: { price: number; duration: string; startDate: Date; endDate: Date },
-    token: string,
+//   async upgradeMembership(
+//     userId: string, // Keycloak UUID
+//     plan: { price: number; duration: string; startDate: Date; endDate: Date },
+//     token: string,
+// ): Promise<any> {
+//     // Find user by Keycloak ID
+//     const user = await this.userModel.findOne({ 'keycloakData.keycloakId': userId });
+//     if (!user) {
+//         throw new Error('User not found');
+//     }
+
+//     const maxRetries = 3;
+//     let attempt = 0;
+//     let lastError;
+
+//     while (attempt < maxRetries) {
+//         try {
+//             // Step 1: Validate the token via Keycloak introspection
+//             const introspectionUrl = `${process.env.KEYCLOAK_URL || 'http://localhost:8080'}/realms/${process.env.KEYCLOAK_REALM || 'FanClubRealm'}/protocol/openid-connect/token/introspect`;
+//             const introspectionResponse = await firstValueFrom(
+//                 this.httpService.post(
+//                     introspectionUrl,
+//                     new URLSearchParams({
+//                         token: token,
+//                         client_id: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+//                         client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+//                     }).toString(),
+//                     {
+//                         headers: {
+//                             'Content-Type': 'application/x-www-form-urlencoded',
+//                             'Connection': 'keep-alive',
+//                         },
+//                         timeout: 5000,
+//                     },
+//                 ),
+//             );
+
+//             const tokenData = introspectionResponse.data;
+//             if (!tokenData.active) {
+//                 throw new Error('Invalid or expired token');
+//             }
+
+//             // Step 2: Authenticate Keycloak admin client
+//             await this.keycloakAdmin.auth({
+//                 grantType: 'client_credentials',
+//                 clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+//                 clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+//             });
+
+//             // Step 3: Fetch the client ID for "fanclub-user-membership"
+//             const clients = await this.keycloakAdmin.clients.find({
+//                 clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+//             });
+//             if (!clients || clients.length === 0 || !clients[0].id) {
+//                 throw new Error('Client not found in Keycloak');
+//             }
+//             const clientId: string = clients[0].id; // Type assertion or guaranteed by check above
+
+//             // Step 4: Fetch the "PREMIUM_USER" role from the client
+//             const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+//             const premiumRole = roles.find(role => role.name === 'PREMIUM_USER');
+//             if (!premiumRole || !premiumRole.id || !premiumRole.name) {
+//                 throw new Error('PREMIUM_USER role not found in client or missing required properties');
+//             }
+
+//             // Step 5: Assign the "PREMIUM_USER" client role in Keycloak
+//             await this.keycloakAdmin.users.addClientRoleMappings({
+//                 id: userId, // Keycloak UUID
+//                 clientUniqueId: clientId,
+//                 roles: [{ id: premiumRole.id, name: premiumRole.name }], // Now guaranteed to be strings
+//             });
+
+//             // Step 6: Update membership in MongoDB using user._id
+//             const membership = await this.membershipModel.findOneAndUpdate(
+//                 { userId: user._id },
+//                 {
+//                     membershipType: 'PREMIUM',
+//                     upgradeDate: new Date(),
+//                     subscriptionPlan: { ...plan, isActive: true },
+//                 },
+//                 { new: true },
+//             );
+
+//             if (!membership) {
+//                 throw new Error('Membership not found');
+//             }
+
+//             // Step 7: Update user role in MongoDB
+//             await this.userModel.findByIdAndUpdate(user._id, {
+//                 role: 'PREMIUM_USER',
+//             });
+
+//             // Step 8: Emit Kafka event with MongoDB ID
+//             this.kafkaClient.emit('membership-upgraded', {
+//                 userId: user._id as Types.ObjectId,
+//                 membershipType: 'PREMIUM',
+//             });
+
+//             return {
+//                 status: 'success',
+//                 message: 'Membership upgraded to PREMIUM',
+//                 userId: user._id,
+//                 keycloakId: userId,
+//             };
+//         } catch (error) {
+//             lastError = error;
+
+//             if (
+//                 error.code === 'ECONNRESET' ||
+//                 error.message.includes('ECONNRESET') ||
+//                 error.code === 'ETIMEDOUT' ||
+//                 error.code === 'ECONNREFUSED'
+//             ) {
+//                 attempt++;
+//                 if (attempt < maxRetries) {
+//                     const backoffTime = Math.pow(2, attempt - 1) * 1000;
+//                     console.log(`Retry attempt ${attempt} for membership upgrade after ${backoffTime}ms`);
+//                     await new Promise(resolve => setTimeout(resolve, backoffTime));
+//                     continue;
+//                 }
+//             }
+
+//             console.error('Error upgrading membership:', error.message);
+//             throw new Error(`Membership upgrade failed after ${attempt} attempts. Error: ${lastError.message}`);
+//         }
+//     }
+// }
+
+
+
+
+
+
+async upgradeMembership(
+  userId: string, // Keycloak UUID
+  body: { duration: 'Monthly' | 'Yearly'; price?: number },
+  token: string,
 ): Promise<any> {
-    // Find user by Keycloak ID
-    const user = await this.userModel.findOne({ 'keycloakData.keycloakId': userId });
-    if (!user) {
-        throw new Error('User not found');
-    }
+  // Find user by Keycloak ID
+  const user = await this.userModel.findOne({ 'keycloakData.keycloakId': userId });
+  if (!user) {
+    throw new Error('User not found');
+  }
 
-    const maxRetries = 3;
-    let attempt = 0;
-    let lastError;
+  const maxRetries = 3;
+  let attempt = 0;
+  let lastError;
 
-    while (attempt < maxRetries) {
-        try {
-            // Step 1: Validate the token via Keycloak introspection
-            const introspectionUrl = `${process.env.KEYCLOAK_URL || 'http://localhost:8080'}/realms/${process.env.KEYCLOAK_REALM || 'FanClubRealm'}/protocol/openid-connect/token/introspect`;
-            const introspectionResponse = await firstValueFrom(
-                this.httpService.post(
-                    introspectionUrl,
-                    new URLSearchParams({
-                        token: token,
-                        client_id: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-                        client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
-                    }).toString(),
-                    {
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'Connection': 'keep-alive',
-                        },
-                        timeout: 5000,
-                    },
-                ),
-            );
+  while (attempt < maxRetries) {
+    try {
+      // Step 1: Validate the token via Keycloak introspection
+      const introspectionUrl = `${process.env.KEYCLOAK_URL || 'http://localhost:8080'}/realms/${process.env.KEYCLOAK_REALM || 'FanClubRealm'}/protocol/openid-connect/token/introspect`;
+      const introspectionResponse = await firstValueFrom(
+        this.httpService.post(
+          introspectionUrl,
+          new URLSearchParams({
+            token: token,
+            client_id: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+            client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+          }).toString(),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Connection': 'keep-alive',
+            },
+            timeout: 5000,
+          },
+        ),
+      );
 
-            const tokenData = introspectionResponse.data;
-            if (!tokenData.active) {
-                throw new Error('Invalid or expired token');
-            }
+      const tokenData = introspectionResponse.data;
+      if (!tokenData.active) {
+        throw new Error('Invalid or expired token');
+      }
 
-            // Step 2: Authenticate Keycloak admin client
-            await this.keycloakAdmin.auth({
-                grantType: 'client_credentials',
-                clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-                clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
-            });
+      // Step 2: Authenticate Keycloak admin client
+      await this.keycloakAdmin.auth({
+        grantType: 'client_credentials',
+        clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+        clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+      });
 
-            // Step 3: Fetch the client ID for "fanclub-user-membership"
-            const clients = await this.keycloakAdmin.clients.find({
-                clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-            });
-            if (!clients || clients.length === 0 || !clients[0].id) {
-                throw new Error('Client not found in Keycloak');
-            }
-            const clientId: string = clients[0].id; // Type assertion or guaranteed by check above
+      // Step 3: Fetch the client ID for "fanclub-user-membership"
+      const clients = await this.keycloakAdmin.clients.find({
+        clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+      });
+      if (!clients || clients.length === 0 || !clients[0].id) {
+        throw new Error('Client not found in Keycloak');
+      }
+      const clientId: string = clients[0].id;
 
-            // Step 4: Fetch the "PREMIUM_USER" role from the client
-            const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
-            const premiumRole = roles.find(role => role.name === 'PREMIUM_USER');
-            if (!premiumRole || !premiumRole.id || !premiumRole.name) {
-                throw new Error('PREMIUM_USER role not found in client or missing required properties');
-            }
+      // Step 4: Fetch the "PREMIUM_USER" role from the client
+      const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+      const premiumRole = roles.find(role => role.name === 'PREMIUM_USER');
+      if (!premiumRole || !premiumRole.id || !premiumRole.name) {
+        throw new Error('PREMIUM_USER role not found in client or missing required properties');
+      }
 
-            // Step 5: Assign the "PREMIUM_USER" client role in Keycloak
-            await this.keycloakAdmin.users.addClientRoleMappings({
-                id: userId, // Keycloak UUID
-                clientUniqueId: clientId,
-                roles: [{ id: premiumRole.id, name: premiumRole.name }], // Now guaranteed to be strings
-            });
+      // Step 5: Assign the "PREMIUM_USER" client role in Keycloak
+      await this.keycloakAdmin.users.addClientRoleMappings({
+        id: userId,
+        clientUniqueId: clientId,
+        roles: [{ id: premiumRole.id, name: premiumRole.name }],
+      });
 
-            // Step 6: Update membership in MongoDB using user._id
-            const membership = await this.membershipModel.findOneAndUpdate(
-                { userId: user._id },
-                {
-                    membershipType: 'PREMIUM',
-                    upgradeDate: new Date(),
-                    subscriptionPlan: { ...plan, isActive: true },
-                },
-                { new: true },
-            );
+      // Step 6: Update user membership details in MongoDB with auto-calculated dates
+      const startDate = new Date(); // Automatically set to current date
+      let endDate = new Date(startDate);
+      const price = body.price || (body.duration === 'Monthly' ? 29.99 : 129.99); // Default prices
+      if (body.duration === 'Monthly') {
+        endDate.setMonth(endDate.getMonth() + 1); // Add 1 month
+      } else if (body.duration === 'Yearly') {
+        endDate.setFullYear(endDate.getFullYear() + 1); // Add 12 months
+      }
 
-            if (!membership) {
-                throw new Error('Membership not found');
-            }
+      user.membershipStatus = 'ACTIVE';
+      user.membershipBadge = 'Premium';
+      user.role = 'PREMIUM_USER';
+      user.subscriptionPlan = {
+        price,
+        duration: body.duration,
+        startDate,
+        endDate,
+        isActive: true,
+      };
+      await user.save();
 
-            // Step 7: Update user role in MongoDB
-            await this.userModel.findByIdAndUpdate(user._id, {
-                role: 'PREMIUM_USER',
-            });
+      // Step 7: Emit Kafka event with MongoDB ID
+      this.kafkaClient.emit('membership-upgraded', {
+        userId: user._id as Types.ObjectId,
+        membershipType: 'PREMIUM',
+        duration: body.duration,
+      });
 
-            // Step 8: Emit Kafka event with MongoDB ID
-            this.kafkaClient.emit('membership-upgraded', {
-                userId: user._id as Types.ObjectId,
-                membershipType: 'PREMIUM',
-            });
+      return {
+        status: 'success',
+        message: `Membership upgraded to PREMIUM for ${body.duration}`,
+        userId: user._id,
+        keycloakId: userId,
+        subscriptionPlan: user.subscriptionPlan,
+      };
+    } catch (error) {
+      lastError = error;
 
-            return {
-                status: 'success',
-                message: 'Membership upgraded to PREMIUM',
-                userId: user._id,
-                keycloakId: userId,
-            };
-        } catch (error) {
-            lastError = error;
-
-            if (
-                error.code === 'ECONNRESET' ||
-                error.message.includes('ECONNRESET') ||
-                error.code === 'ETIMEDOUT' ||
-                error.code === 'ECONNREFUSED'
-            ) {
-                attempt++;
-                if (attempt < maxRetries) {
-                    const backoffTime = Math.pow(2, attempt - 1) * 1000;
-                    console.log(`Retry attempt ${attempt} for membership upgrade after ${backoffTime}ms`);
-                    await new Promise(resolve => setTimeout(resolve, backoffTime));
-                    continue;
-                }
-            }
-
-            console.error('Error upgrading membership:', error.message);
-            throw new Error(`Membership upgrade failed after ${attempt} attempts. Error: ${lastError.message}`);
+      if (
+        error.code === 'ECONNRESET' ||
+        error.message.includes('ECONNRESET') ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ECONNREFUSED'
+      ) {
+        attempt++;
+        if (attempt < maxRetries) {
+          const backoffTime = Math.pow(2, attempt - 1) * 1000;
+          console.log(`Retry attempt ${attempt} for membership upgrade after ${backoffTime}ms`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+          continue;
         }
+      }
+
+      console.error('Error upgrading membership:', error.message);
+      throw new Error(`Membership upgrade failed after ${attempt} attempts. Error: ${lastError.message}`);
     }
+  }
 }
 
 
@@ -689,63 +826,69 @@ export class UserService {
 
 
   async assignAdminRole(userId: string): Promise<any> {
-    const user = await this.userModel.findById(userId).exec();
-    if (!user) {
-        throw new Error('User not found');
-    }
-
-    try {
+    const maxRetries = 5;
+    let attempt = 0;
+    let lastError;
+  
+    while (attempt < maxRetries) {
+      try {
+        const user = await this.userModel.findById(userId).exec();
+        if (!user) {
+          throw new Error('User not found');
+        }
+  
         // Authenticate with Keycloak
         await this.keycloakAdmin.auth({
-            grantType: 'client_credentials',
-            clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
-            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+          grantType: 'client_credentials',
+          clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+          clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
         });
-
+  
         // Get client
         const clients = await this.keycloakAdmin.clients.find({
-            clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+          clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
         });
         if (!clients[0]?.id) {
           throw new Error('Client not found in Keycloak');
-      }
-      const clientId = clients[0].id;
-
+        }
+        const clientId = clients[0].id;
+  
         // Get ADMIN role
         const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
         const adminRole = roles.find(role => role.name === 'ADMIN');
         if (!adminRole) {
-            throw new Error('ADMIN role not found in Keycloak');
+          throw new Error('ADMIN role not found in Keycloak');
         }
-
+  
         // Assign ADMIN role in Keycloak
         await this.keycloakAdmin.users.addClientRoleMappings({
-            id: user.keycloakData.keycloakId,
-            clientUniqueId: clientId,
-            roles: [{ id: adminRole.id ?? '', name: adminRole.name ?? '' }],
+          id: user.keycloakData.keycloakId,
+          clientUniqueId: clientId,
+          roles: [{ id: adminRole.id ?? '', name: adminRole.name ?? '' }],
         });
-
+  
         // Update user role in MongoDB
         user.role = 'ADMIN';
         await user.save();
-
+  
         // Emit event
         this.kafkaClient.emit('role-assigned', {
-            userId: user._id,
-            role: 'ADMIN'
+          userId: user._id,
+          role: 'ADMIN'
         });
-
+  
         return {
-            status: 'success',
-            message: 'Admin role assigned successfully',
-            userId: user._id,
-            role: 'ADMIN'
+          status: 'success',
+          message: 'Admin role assigned successfully',
         };
-
-    } catch (error) {
-        throw new Error(`Failed to assign admin role: ${error.message}`);
+      } catch (error) {
+        lastError = error;
+        attempt++;
+      }
     }
-}
+  
+    throw lastError;
+  }
 
 
   

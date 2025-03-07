@@ -43,9 +43,9 @@ export class UserController {
   @Post('upgrade')
   @UseGuards(AuthGuard)
   @Resource('users')
-  @Roles({ roles: ['USER'] })
+  @Roles({ roles: ['USER', 'ADMIN'] })
   async upgradeMembership(
-    @Body() body: { plan: { price: number; duration: string; startDate: Date; endDate: Date } },
+    @Body() body: { duration: 'Monthly' | 'Yearly'; price?: number },
     @Req() request: any,
   ) {
     const token = request.headers.authorization?.split(' ')[1];
@@ -54,7 +54,7 @@ export class UserController {
     }
     const decodedToken = this.decodeToken(token);
     const userId = decodedToken.sub;
-    return this.userService.upgradeMembership(userId, body.plan, token);
+    return this.userService.upgradeMembership(userId, body, token);
   }
 
   private decodeToken(token: string): any {
@@ -64,14 +64,16 @@ export class UserController {
   }
 
   @Post('assign-gestionnaire')
+  @UseGuards(AuthGuard)
+  @Resource('users')
   @Roles({ roles: ['ADMIN'] })
   async assignGestionnaireRole(@Body() body: { userId: string; teamId: string }) {
     return this.userService.assignGestionnaireRole(body.userId, body.teamId);
   }
   @Post('assign-admin')
-@UseGuards(AuthGuard)
-@Resource('users')
-@Roles({ roles: ['ADMIN'] })
+  @UseGuards(AuthGuard)
+  @Resource('users')
+  @Roles({ roles: ['ADMIN'] })
 async assignAdminRole(@Body() body: { userId: string }) {
   return this.userService.assignAdminRole(body.userId);
 }
