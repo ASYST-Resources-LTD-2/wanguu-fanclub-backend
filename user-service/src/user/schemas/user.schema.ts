@@ -1,7 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-export type UserDocument = User & Document;
+
+interface NotificationPreferences {
+  email: boolean;
+  sms: boolean;
+}
 
 @Schema()
 export class User {
@@ -14,11 +18,24 @@ export class User {
   @Prop({ required: false }) // Password is managed by Keycloak; not stored here
   password?: string;
 
+  @Prop({ type: String, required: true, enum: ['ACTIVE', 'INACTIVE'] })
+  membershipStatus: string;
+
+  @Prop({ 
+    type: String, 
+    enum: ['Basic', 'Premium'],
+    default: 'Basic'
+  })
+   membershipBadge: string;
+
   @Prop({ type: [Types.ObjectId], ref: 'Sport', default: [] })
   selectedSports: Types.ObjectId[];
 
-  @Prop({ type: [String], default: [] })
-  teamIds: Types.ObjectId[];
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Team' }] })
+  selectedTeamIds: Types.ObjectId[];
+
+  @Prop({ type: Object })
+  notificationPreferences: NotificationPreferences;
 
   @Prop({
     type: String,
@@ -39,5 +56,6 @@ export class User {
     refreshTokenExpiresAt?: Date;
   };
 }
+export type UserDocument = User & Document;
 
 export const UserSchema = SchemaFactory.createForClass(User);

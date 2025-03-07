@@ -1,13 +1,14 @@
-// src/sport/schemas/sport.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
-
-export type SportDocument = Sport & Document;
+import { Document, Types } from 'mongoose';
 
 @Schema()
 export class Sport {
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true })
   name: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'SportCategory', required: true })
+  categoryId: Types.ObjectId;
 }
 
+export type SportDocument = Sport & Document;
 export const SportSchema = SchemaFactory.createForClass(Sport);

@@ -10,6 +10,12 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import axios from 'axios';
 
+interface NotificationPreferences {
+  email: boolean;
+  sms: boolean;
+}
+
+
 @Injectable()
 export class UserService {
   private keycloakAdmin: KeycloakAdminClient;
@@ -28,42 +34,223 @@ export class UserService {
 
   
 
+  
+
   async onModuleInit(){
     await this.kafkaClient.connect();
   }
-  async createUser(username: string, email: string, password: string): Promise<any> {
-    const maxRetries = 3;
+  // async createUser(username: string, email: string, password: string): Promise<any> {
+
+  //   interface NotificationPreferences {
+  //     email: boolean;
+  //     sms: boolean;
+  //   }
+  //   const maxRetries = 3;
+  //   let attempt = 0;
+  //   let lastError;
+  //   let keycloakUser: { id?: string } | null = null;
+  
+  //   while (attempt < maxRetries) {
+  //     try {
+  //       // Check for existing user in MongoDB
+  //       const existingUser = await this.userModel.findOne({ 
+  //         $or: [{ username }, { email }] 
+  //       }).exec();
+  //       if (existingUser) {
+  //         throw new Error('User already exists in MongoDB');
+  //       }
+  
+  //       // Authenticate Keycloak admin client
+  //       await this.keycloakAdmin.auth({
+  //         grantType: 'client_credentials',
+  //         clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+  //         clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+  //       });
+  
+  //       // Check for existing user in Keycloak
+  //       const existingKeycloakUsers = await this.keycloakAdmin.users.find({
+  //         username: username,
+  //         email: email
+  //       });
+  //       if (existingKeycloakUsers.length > 0) {
+  //         throw new Error('User already exists in Keycloak');
+  //       }
+  
+  //       // Create user in Keycloak
+  //       const createdKeycloakUser = await this.keycloakAdmin.users.create({
+  //         username,
+  //         email,
+  //         enabled: true,
+  //         credentials: [{ type: 'password', value: password, temporary: false }],
+  //         emailVerified: true,
+  //       });
+  //       keycloakUser = createdKeycloakUser;
+  
+  //       if (!keycloakUser?.id) {
+  //         throw new Error('Failed to create Keycloak user');
+  //       }
+  
+  //       // Optional: Remove existing realm roles if needed
+  //       const realmRoles = await this.keycloakAdmin.users.listRealmRoleMappings({
+  //         id: keycloakUser.id,
+  //       });
+  //       if (realmRoles.length > 0) {
+  //         await this.keycloakAdmin.users.delRealmRoleMappings({
+  //           id: keycloakUser.id,
+  //           roles: realmRoles.map(role => ({ id: role.id ?? '', name: role.name ?? '' })),
+  //         });
+  //       }
+  
+  //       // Fetch the "fanclub-user-membership" client
+  //       const client = await this.keycloakAdmin.clients.find({
+  //         clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+  //       });
+  //       if (!client?.[0]?.id) {
+  //         throw new Error('Client not found in Keycloak');
+  //       }
+  //       const clientId = client[0].id;
+  
+  //       // Fetch the "USER" role from the client
+  //       const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+  //       const userRole = roles.find(role => role.name === 'USER');
+  //       if (!userRole) {
+  //         if (keycloakUser.id) {
+  //           await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+  //         }
+  //         throw new Error('Role "USER" not found in client');
+  //       }
+  
+  //       // Assign the "USER" role to the user in Keycloak
+  //       await this.keycloakAdmin.users.addClientRoleMappings({
+  //         id: keycloakUser.id,
+  //         clientUniqueId: clientId,
+  //         roles: [{ id: userRole.id ?? '', name: userRole.name ?? '' }],
+  //       });
+  
+  //       // Create user in MongoDB
+  //       const createdUser = new this.userModel({
+  //         username,
+  //         email,
+  //         role: userRole.name,
+  //         keycloakData: {
+  //           keycloakId: keycloakUser.id,
+  //         },
+  //         selectedSports: [],
+  //         teamIds: [],
+  //       });
+  //       const savedUser = await createdUser.save();
+  
+  //       // Create membership in MongoDB
+  //       const membership = new this.membershipModel({
+  //         userId: savedUser._id as Types.ObjectId,
+  //         membershipType: 'FREE',
+  //       });
+  //       await membership.save();
+  
+  //       // Emit Kafka event
+  //       this.kafkaClient.emit('UserCreated', {
+  //         username,
+  //         email,
+  //         userId: savedUser._id,
+  //       });
+  
+  //       return {
+  //         mongoUser: savedUser,
+  //         keycloakUser,
+  //         keycloakUserRole: userRole.name,
+  //         status: 'success',
+  //         message: 'User created successfully',
+  //       };
+  
+  //     } catch (error) {
+  //       lastError = error;
+  //       // Rollback: Delete Keycloak user if subsequent steps fail
+  //       if (keycloakUser?.id) {
+  //         try {
+  //           await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+  //         } catch (deleteError) {
+  //           console.error('Failed to delete Keycloak user on error:', deleteError);
+  //         }
+  //       }
+  //       if (error.code === 'ECONNRESET' || error.message.includes('ECONNRESET')) {
+  //         attempt++;
+  //         if (attempt < maxRetries) {
+  //           const backoffTime = Math.pow(2, attempt - 1) * 1000;
+  //           console.log(`Retry attempt ${attempt} after ${backoffTime}ms`);
+  //           await new Promise(resolve => setTimeout(resolve, backoffTime));
+  //           continue;
+  //         }
+  //       }
+  //       throw new Error(`User creation failed after ${attempt} attempts. Error: ${lastError.message}`);
+  //     }
+  //   }
+  // }
+
+  
+
+  async createUser(
+    username: string,
+    email: string,
+    password: string,
+    selectedSports: string[] = [],
+    selectedTeamIds: string[] = [],
+    notificationPreferences: NotificationPreferences = { email: true, sms: false },
+    teamId?: string,
+    role: string = 'USER', // Accepts either "USER" or "ADMIN"
+  ): Promise<any> {
+    // Step 1: Validate input
+    const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
+    if (selectedSports.length > 0 && !selectedSports.every(isValidObjectId)) {
+      throw new Error('Invalid ObjectId in selectedSports');
+    }
+    if (selectedTeamIds.length > 0 && !selectedTeamIds.every(isValidObjectId)) {
+      throw new Error('Invalid ObjectId in selectedTeamIds');
+    }
+    if (typeof notificationPreferences !== 'object' ||
+        typeof notificationPreferences.email !== 'boolean' ||
+        typeof notificationPreferences.sms !== 'boolean') {
+      throw new Error('Invalid notificationPreferences structure');
+    }
+    if (teamId && !isValidObjectId(teamId)) {
+      throw new Error('Invalid teamId');
+    }
+    const validRoles = ['USER', 'ADMIN'];
+    if (!validRoles.includes(role)) {
+      throw new Error('Invalid role specified');
+    }
+
+    const maxRetries = 5;
     let attempt = 0;
     let lastError;
-    let keycloakUser: { id?: string } | null = null;
-  
+    let keycloakUserId: string | null = null;
+
     while (attempt < maxRetries) {
       try {
-        // Check for existing user in MongoDB
-        const existingUser = await this.userModel.findOne({ 
-          $or: [{ username }, { email }] 
+        // Step 2: Check if user exists in MongoDB
+        const existingUser = await this.userModel.findOne({
+          $or: [{ username }, { email }],
         }).exec();
         if (existingUser) {
           throw new Error('User already exists in MongoDB');
         }
-  
-        // Authenticate Keycloak admin client
+
+        // Step 3: Authenticate Keycloak admin client
         await this.keycloakAdmin.auth({
           grantType: 'client_credentials',
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
           clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
         });
-  
-        // Check for existing user in Keycloak
+
+        // Step 4: Check for existing user in Keycloak
         const existingKeycloakUsers = await this.keycloakAdmin.users.find({
-          username: username,
-          email: email
+          username,
+          email,
         });
         if (existingKeycloakUsers.length > 0) {
           throw new Error('User already exists in Keycloak');
         }
-  
-        // Create user in Keycloak
+
+        // Step 5: Create the user in Keycloak
         const createdKeycloakUser = await this.keycloakAdmin.users.create({
           username,
           email,
@@ -71,24 +258,12 @@ export class UserService {
           credentials: [{ type: 'password', value: password, temporary: false }],
           emailVerified: true,
         });
-        keycloakUser = createdKeycloakUser;
-  
-        if (!keycloakUser?.id) {
+        keycloakUserId = createdKeycloakUser.id;
+        if (!keycloakUserId) {
           throw new Error('Failed to create Keycloak user');
         }
-  
-        // Optional: Remove existing realm roles if needed
-        const realmRoles = await this.keycloakAdmin.users.listRealmRoleMappings({
-          id: keycloakUser.id,
-        });
-        if (realmRoles.length > 0) {
-          await this.keycloakAdmin.users.delRealmRoleMappings({
-            id: keycloakUser.id,
-            roles: realmRoles.map(role => ({ id: role.id ?? '', name: role.name ?? '' })),
-          });
-        }
-  
-        // Fetch the "fanclub-user-membership" client
+
+        // Step 6: Fetch the Keycloak client by clientId
         const client = await this.keycloakAdmin.clients.find({
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
         });
@@ -96,65 +271,80 @@ export class UserService {
           throw new Error('Client not found in Keycloak');
         }
         const clientId = client[0].id;
-  
-        // Fetch the "USER" role from the client
+
+        // Step 7: Fetch and assign the appropriate role based on the provided role value.
         const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
-        const userRole = roles.find(role => role.name === 'USER');
-        if (!userRole) {
-          if (keycloakUser.id) {
-            await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+        let selectedRole;
+        if (role === 'ADMIN') {
+          selectedRole = roles.find(r => r.name === 'ADMIN');
+          if (!selectedRole) {
+            // Rollback Keycloak user creation if role not found.
+            await this.keycloakAdmin.users.del({ id: keycloakUserId });
+            throw new Error('Role "ADMIN" not found in client');
           }
-          throw new Error('Role "USER" not found in client');
+        } else {
+          selectedRole = roles.find(r => r.name === 'USER');
+          if (!selectedRole) {
+            await this.keycloakAdmin.users.del({ id: keycloakUserId });
+            throw new Error('Role "USER" not found in client');
+          }
         }
-  
-        // Assign the "USER" role to the user in Keycloak
+        // Assign the selected role to the Keycloak user
         await this.keycloakAdmin.users.addClientRoleMappings({
-          id: keycloakUser.id,
+          id: keycloakUserId,
           clientUniqueId: clientId,
-          roles: [{ id: userRole.id ?? '', name: userRole.name ?? '' }],
+          roles: [{ id: selectedRole.id ?? '', name: selectedRole.name ?? '' }],
         });
-  
-        // Create user in MongoDB
-        const createdUser = new this.userModel({
+
+        // Step 8: Create user in MongoDB with the assigned role
+        const newUser = new this.userModel({
           username,
           email,
-          role: userRole.name,
+          membershipStatus: 'INACTIVE',
+          membershipBadge: 'Basic',
+          selectedSports: selectedSports.length > 0 ? selectedSports.map(id => new Types.ObjectId(id)) : [],
+          selectedTeamIds: selectedTeamIds.length > 0 ? selectedTeamIds.map(id => new Types.ObjectId(id)) : [],
+          notificationPreferences,
+          role: selectedRole.name, // Save the role (either "USER" or "ADMIN")
+          teamId: teamId ? new Types.ObjectId(teamId) : null,
           keycloakData: {
-            keycloakId: keycloakUser.id,
+            keycloakId: keycloakUserId,
           },
-          selectedSports: [],
-          teamIds: [],
         });
-        const savedUser = await createdUser.save();
-  
-        // Create membership in MongoDB
+        const savedUser = await newUser.save();
+
+        // Step 9: Optionally, create a membership record in MongoDB (here defaulting to FREE)
         const membership = new this.membershipModel({
           userId: savedUser._id as Types.ObjectId,
           membershipType: 'FREE',
         });
         await membership.save();
-  
-        // Emit Kafka event
+
+        // Step 10: Emit a Kafka event that a new user was created.
         this.kafkaClient.emit('UserCreated', {
           username,
           email,
           userId: savedUser._id,
+          role: selectedRole.name,
+          membershipStatus: 'INACTIVE',
+          membershipBadge: 'Basic',
         });
-  
+
         return {
           mongoUser: savedUser,
-          keycloakUser,
-          keycloakUserRole: userRole.name,
+          keycloakUserId,
+          keycloakUserRole: selectedRole.name,
           status: 'success',
           message: 'User created successfully',
         };
-  
+
       } catch (error) {
         lastError = error;
+        console.error('Error creating user:', error);
         // Rollback: Delete Keycloak user if subsequent steps fail
-        if (keycloakUser?.id) {
+        if (keycloakUserId) {
           try {
-            await this.keycloakAdmin.users.del({ id: keycloakUser.id });
+            await this.keycloakAdmin.users.del({ id: keycloakUserId });
           } catch (deleteError) {
             console.error('Failed to delete Keycloak user on error:', deleteError);
           }
@@ -496,6 +686,67 @@ export class UserService {
   });
   return { status: 'success', message: 'Gestionnaire role assigned' };
   }
+
+
+  async assignAdminRole(userId: string): Promise<any> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+        throw new Error('User not found');
+    }
+
+    try {
+        // Authenticate with Keycloak
+        await this.keycloakAdmin.auth({
+            grantType: 'client_credentials',
+            clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+        });
+
+        // Get client
+        const clients = await this.keycloakAdmin.clients.find({
+            clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+        });
+        if (!clients[0]?.id) {
+          throw new Error('Client not found in Keycloak');
+      }
+      const clientId = clients[0].id;
+
+        // Get ADMIN role
+        const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
+        const adminRole = roles.find(role => role.name === 'ADMIN');
+        if (!adminRole) {
+            throw new Error('ADMIN role not found in Keycloak');
+        }
+
+        // Assign ADMIN role in Keycloak
+        await this.keycloakAdmin.users.addClientRoleMappings({
+            id: user.keycloakData.keycloakId,
+            clientUniqueId: clientId,
+            roles: [{ id: adminRole.id ?? '', name: adminRole.name ?? '' }],
+        });
+
+        // Update user role in MongoDB
+        user.role = 'ADMIN';
+        await user.save();
+
+        // Emit event
+        this.kafkaClient.emit('role-assigned', {
+            userId: user._id,
+            role: 'ADMIN'
+        });
+
+        return {
+            status: 'success',
+            message: 'Admin role assigned successfully',
+            userId: user._id,
+            role: 'ADMIN'
+        };
+
+    } catch (error) {
+        throw new Error(`Failed to assign admin role: ${error.message}`);
+    }
+}
+
 
   
 
