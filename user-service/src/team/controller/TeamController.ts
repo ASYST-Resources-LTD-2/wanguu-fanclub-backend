@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, UseGuards, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Patch, Delete, Req } from '@nestjs/common';
 import { AuthGuard, Roles } from 'nest-keycloak-connect';
 import { TeamService } from '../TeamService';
 import { Team } from '../schemas/team.schema';
@@ -34,10 +34,30 @@ export class TeamController {
   }
 
   @Delete(':teamId')
-  @UseGuards(AuthGuard)
-  @Roles({ roles: ['ADMIN'] })
-  async deleteTeam(@Param('teamId') teamId: string) {
-    await this.teamService.deleteTeam(teamId);
-    return { status: 'success', message: 'Team deleted successfully' };
+@UseGuards(AuthGuard)
+@Roles({ roles: ['ADMIN'] })
+async deleteTeam(@Param('teamId') teamId: string, @Req() request: any) {
+  const token = request.headers.authorization?.split(' ')[1];
+  if (!token) {
+    throw new Error('No authorization token provided');
   }
+
+  const decodedToken = this.decodeToken(token);
+  const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+  
+  if (!isAdmin) {
+    throw new Error('Unauthorized: Only admins can delete teams');
+  }
+
+  return this.teamService.deleteTeam(teamId);
+}
+
+
+
+private decodeToken(token: string): any {
+  const payload = token.split('.')[1];
+  const decodedPayload = Buffer.from(payload, 'base64').toString('utf8');
+  return JSON.parse(decodedPayload);
+}
+
 }

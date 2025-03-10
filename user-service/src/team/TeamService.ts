@@ -73,19 +73,23 @@ export class TeamService {
     return updatedTeam;
   }
 
-  async deleteTeam(teamId: string): Promise<void> {
-    // Check if any users have this team in selectedTeamIds
+  async deleteTeam(teamId: string): Promise<{ message: string }> {
     const usersWithTeam = await this.userModel
       .find({ selectedTeamIds: new Types.ObjectId(teamId) })
       .exec();
     if (usersWithTeam.length > 0) {
-      throw new Error('Cannot delete team: it is selected by users');
+      throw new HttpException(
+        'Cannot delete team: it is selected by users',
+        HttpStatus.CONFLICT
+      );
     }
-
+  
     const deletedTeam = await this.teamModel.findByIdAndDelete(teamId).exec();
     if (!deletedTeam) {
-      throw new Error('Team not found');
+      throw new HttpException('Team not found', HttpStatus.NOT_FOUND);
     }
+  
+    return { message: `Team with ID ${teamId} deleted successfully` };
   }
 
   async getTeamsBySportCategory(sportCategoryId: string): Promise<Team[]> {
