@@ -8,6 +8,7 @@ import { ClientKafka } from '@nestjs/microservices';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import axios from 'axios';
+import { Team } from 'src/team/schemas/team.schema';
 // import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
 
 interface NotificationPreferences {
@@ -22,6 +23,7 @@ export class UserService {
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Team.name) private teamModel: Model<Team>,
     // @InjectModel(Membership.name) private membershipModel: Model<MembershipDocument>,
     @Inject('KAFKA_SERVICE') private kafkaClient: ClientKafka,
     private readonly httpService: HttpService,
@@ -192,20 +194,24 @@ export class UserService {
     username: string,
     email: string,
     password: string,
-    selectedSports: string[] = [],
+    selectedSports: string[] = [], // This will be overridden based on selectedTeamIds
     selectedTeamIds: string[] = [],
     notificationPreferences: NotificationPreferences = { email: true, sms: false },
     teamId?: string,
-    role: string = 'USER', // Accepts either "USER" or "ADMIN"
+    role: string = 'USER',
   ): Promise<any> {
     // Step 1: Validate input
     const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
-    if (selectedSports.length > 0 && !selectedSports.every(isValidObjectId)) {
-      throw new Error('Invalid ObjectId in selectedSports');
+  
+    // Validate selectedTeamIds
+    if (selectedTeamIds.length > 3) {
+      throw new Error('Cannot select more than 3 teams');
     }
     if (selectedTeamIds.length > 0 && !selectedTeamIds.every(isValidObjectId)) {
       throw new Error('Invalid ObjectId in selectedTeamIds');
     }
+  
+    // Validate notificationPreferences
     if (
       typeof notificationPreferences !== 'object' ||
       typeof notificationPreferences.email !== 'boolean' ||
@@ -213,12 +219,35 @@ export class UserService {
     ) {
       throw new Error('Invalid notificationPreferences structure');
     }
+  
+    // Validate teamId if provided
     if (teamId && !isValidObjectId(teamId)) {
       throw new Error('Invalid teamId');
     }
+  
     const validRoles = ['USER', 'ADMIN'];
     if (!validRoles.includes(role)) {
       throw new Error('Invalid role specified');
+    }
+  
+    // Step 2: Derive selectedSports from selectedTeamIds
+    let derivedSelectedSports: string[] = [];
+    if (selectedTeamIds.length > 0) {
+      // Fetch teams to get their sportCategoryId
+      const teams = await this.teamModel.find({ _id: { $in: selectedTeamIds } });
+      if (teams.length !== selectedTeamIds.length) {
+        throw new Error('One or more team IDs do not exist');
+      }
+  
+      // Extract unique sportCategoryIds
+      derivedSelectedSports = [
+        ...new Set(teams.map(team => team.sportCategoryId.toString())),
+      ];
+  
+      // Validate derived sportCategoryIds
+      if (!derivedSelectedSports.every(isValidObjectId)) {
+        throw new Error('Invalid sportCategoryId derived from teams');
+      }
     }
   
     const maxRetries = 5;
@@ -228,7 +257,7 @@ export class UserService {
   
     while (attempt < maxRetries) {
       try {
-        // Step 2: Check if user exists in MongoDB
+        // Step 3: Check if user exists in MongoDB
         const existingUser = await this.userModel.findOne({
           $or: [{ username }, { email }],
         }).exec();
@@ -236,14 +265,14 @@ export class UserService {
           throw new Error('User already exists in MongoDB');
         }
   
-        // Step 3: Authenticate Keycloak admin client
+        // Step 4: Authenticate Keycloak admin client
         await this.keycloakAdmin.auth({
           grantType: 'client_credentials',
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
           clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
         });
   
-        // Step 4: Check for existing user in Keycloak
+        // Step 5: Check for existing user in Keycloak
         const existingKeycloakUsers = await this.keycloakAdmin.users.find({
           username,
           email,
@@ -252,7 +281,7 @@ export class UserService {
           throw new Error('User already exists in Keycloak');
         }
   
-        // Step 5: Create the user in Keycloak
+        // Step 6: Create the user in Keycloak
         const createdKeycloakUser = await this.keycloakAdmin.users.create({
           username,
           email,
@@ -265,7 +294,7 @@ export class UserService {
           throw new Error('Failed to create Keycloak user');
         }
   
-        // Step 6: Fetch the Keycloak client by clientId
+        // Step 7: Fetch the Keycloak client by clientId
         const client = await this.keycloakAdmin.clients.find({
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
         });
@@ -274,13 +303,12 @@ export class UserService {
         }
         const clientId = client[0].id;
   
-        // Step 7: Fetch and assign the appropriate role based on the provided role value.
+        // Step 8: Fetch and assign the appropriate role
         const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
         let selectedRole;
         if (role === 'ADMIN') {
           selectedRole = roles.find(r => r.name === 'ADMIN');
           if (!selectedRole) {
-            // Rollback Keycloak user creation if role not found.
             await this.keycloakAdmin.users.del({ id: keycloakUserId });
             throw new Error('Role "ADMIN" not found in client');
           }
@@ -291,27 +319,22 @@ export class UserService {
             throw new Error('Role "USER" not found in client');
           }
         }
-        // Assign the selected role to the Keycloak user
         await this.keycloakAdmin.users.addClientRoleMappings({
           id: keycloakUserId,
           clientUniqueId: clientId,
           roles: [{ id: selectedRole.id ?? '', name: selectedRole.name ?? '' }],
         });
   
-        // Step 8: Create user in MongoDB with the assigned role (do not create membership record)
+        // Step 9: Create user in MongoDB with derived selectedSports
         const newUser = new this.userModel({
           username,
           email,
           membershipStatus: 'INACTIVE',
           membershipBadge: 'Basic',
-          selectedSports: selectedSports.length > 0
-            ? selectedSports.map(id => new Types.ObjectId(id))
-            : [],
-          selectedTeamIds: selectedTeamIds.length > 0
-            ? selectedTeamIds.map(id => new Types.ObjectId(id))
-            : [],
+          selectedSports: derivedSelectedSports.map(id => new Types.ObjectId(id)),
+          selectedTeamIds: selectedTeamIds.map(id => new Types.ObjectId(id)),
           notificationPreferences,
-          role: selectedRole.name, // Save the role ("USER" or "ADMIN")
+          role: selectedRole.name,
           teamId: teamId ? new Types.ObjectId(teamId) : null,
           keycloakData: {
             keycloakId: keycloakUserId,
@@ -319,7 +342,7 @@ export class UserService {
         });
         const savedUser = await newUser.save();
   
-        // Step 9: Emit a Kafka event that a new user was created.
+        // Step 10: Emit a Kafka event
         this.kafkaClient.emit('UserCreated', {
           username,
           email,
@@ -327,6 +350,8 @@ export class UserService {
           role: selectedRole.name,
           membershipStatus: 'INACTIVE',
           membershipBadge: 'Basic',
+          selectedSports: derivedSelectedSports,
+          selectedTeamIds,
         });
   
         return {
@@ -336,11 +361,9 @@ export class UserService {
           status: 'success',
           message: 'User created successfully',
         };
-  
       } catch (error) {
         lastError = error;
         console.error('Error creating user:', error);
-        // Rollback: Delete Keycloak user if subsequent steps fail
         if (keycloakUserId) {
           try {
             await this.keycloakAdmin.users.del({ id: keycloakUserId });
@@ -586,6 +609,42 @@ export class UserService {
 //         }
 //     }
 // }
+
+
+
+async updateSelectedTeams(userId: string, newSelectedTeamIds: string[]): Promise<any> {
+  // Find the user first
+  const user = await this.userModel.findById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  // Authenticate Keycloak admin client
+  await this.keycloakAdmin.auth({
+    grantType: 'client_credentials',
+    clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+    clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+  });
+
+  // Update the selectedTeamIds
+  user.selectedTeamIds = newSelectedTeamIds.map(id => new Types.ObjectId(id));
+  await user.save();
+
+  // Emit event
+  this.kafkaClient.emit('UserTeamsUpdated', {
+    userId,
+    selectedTeamIds: newSelectedTeamIds,
+  });
+
+  return {
+    status: 'success',
+    message: 'Selected teams updated successfully',
+    selectedTeamIds: user.selectedTeamIds,
+  };
+}
+
+
+
 
 
 

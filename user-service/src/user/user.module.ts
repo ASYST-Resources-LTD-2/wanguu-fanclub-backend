@@ -7,10 +7,12 @@ import { UserController } from './user.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KeycloakModule } from 'src/keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
+import { Team, TeamSchema } from 'src/team/schemas/team.schema';
 
 @Module({
   imports: [MongooseModule.forFeature([
-    { name: User.name, schema: UserSchema }
+    { name: User.name, schema: UserSchema },
+    {name: Team.name, schema: TeamSchema}
 
   ]),
   HttpModule,
