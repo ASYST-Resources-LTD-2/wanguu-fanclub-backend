@@ -1,6 +1,7 @@
-import { Controller, Post, Patch, Body, Param, UseGuards, Req, Get } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Param, UseGuards, Req, Get, Delete } from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthGuard, Resource, Roles, Unprotected } from 'nest-keycloak-connect';
+import { User, UserDocument } from './schemas/user.schema';
 
 @Controller('users')
 @Resource('users') // Define this as a Keycloak resource
@@ -76,6 +77,96 @@ export class UserController {
     // Pass the validated selectedTeamIds array
     return this.userService.updateSelectedTeams(userId, selectedTeamIds);
   }
+
+  @Get('profile/:userId')
+  @UseGuards(AuthGuard)
+  @Roles({ roles: ['USER', 'ADMIN'] })
+  async getUserProfile(@Param('userId') userId: string, @Req() request: any) {
+    const token = request.headers.authorization?.split(' ')[1];
+    if (!token) {
+      throw new Error('No authorization token provided');
+    }
+    
+    const decodedToken = this.decodeToken(token);
+    const keycloakUserId = decodedToken.sub;
+    
+    const authenticatedUser = await this.userService.findUserByKeycloakId(keycloakUserId) as UserDocument;
+    if (!authenticatedUser) {
+      throw new Error('Authenticated user not found');
+    }
+  
+    const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+    if (authenticatedUser.id !== userId && !isAdmin) {
+      throw new Error('Unauthorized: You can only view your own profile');
+    }
+  
+    return this.userService.getUserProfile(userId);
+  }
+  
+
+
+
+  @Patch('profile/:userId')
+  @UseGuards(AuthGuard)
+  @Roles({ roles: ['USER', 'ADMIN'] })
+  async updateUserProfile(
+    @Param('userId') userId: string,
+    @Body() updateData: Partial<User>,
+    @Req() request: any,
+  ) {
+    const token = request.headers.authorization?.split(' ')[1];
+    if (!token) {
+      throw new Error('No authorization token provided');
+    }
+    const decodedToken = this.decodeToken(token);
+    const keycloakUserId = decodedToken.sub;
+
+
+    // Users can only update their own profile unless admin
+    const authenticatedUser = await this.userService.findUserByKeycloakId(keycloakUserId) as UserDocument;
+    if (!authenticatedUser) {
+      throw new Error('Authenticated user not found');
+    }
+  
+    const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+    if (authenticatedUser.id !== userId && !isAdmin) {
+      throw new Error('Unauthorized: You can only view your own profile');
+    }
+
+    return this.userService.updateUserProfile(userId, updateData);
+  }
+
+
+  @Delete(':userId')
+@UseGuards(AuthGuard)
+@Roles({ roles: ['USER', 'ADMIN'] })
+async deleteUser(
+  @Param('userId') userId: string,
+  @Req() request: any
+) {
+    const token = request.headers.authorization?.split(' ')[1];
+    if (!token) {
+      throw new Error('No authorization token provided');
+    }
+
+    const decodedToken = this.decodeToken(token);
+    const keycloakUserId = decodedToken.sub;
+
+    // Get authenticated user
+    const authenticatedUser = await this.userService.findUserByKeycloakId(keycloakUserId) as UserDocument;
+    if (!authenticatedUser) {
+      throw new Error('Authenticated user not found');
+    }
+
+    const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+    
+    await this.userService.deleteUser(userId, authenticatedUser.id, isAdmin);
+    return { 
+      status: 'success', 
+      message: 'User deleted successfully' 
+    };
+}
+
   
 
   /**

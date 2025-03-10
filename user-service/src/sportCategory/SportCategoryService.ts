@@ -9,6 +9,15 @@ export class SportCategoryService {
     @InjectModel(SportCategory.name) private sportCategoryModel: Model<SportCategoryDocument>,
   ) {}
 
+
+  async getSportCategoryById(categoryId: string): Promise<SportCategory> {
+    const category = await this.sportCategoryModel.findById(categoryId).exec();
+    if (!category) {
+      throw new Error('Sport category not found');
+    }
+    return category;
+  }
+
   // Create a new sport category
   async createSportCategory(
     name: string,

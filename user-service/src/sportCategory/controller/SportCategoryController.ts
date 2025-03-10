@@ -41,4 +41,12 @@ export class SportCategoryController {
     await this.sportCategoryService.deleteSportCategory(id);
     return null;
   }
+
+
+  @Get(':id')
+  @UseGuards(AuthGuard)
+  @Roles({ roles: ['USER', 'ADMIN'] })
+  async getSportCategoryById(@Param('id') id: string) {
+    return this.sportCategoryService.getSportCategoryById(id);
+  }
 }

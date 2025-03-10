@@ -41,6 +41,21 @@ export class UserService {
   async onModuleInit(){
     await this.kafkaClient.connect();
   }
+  async findUserByKeycloakId(keycloakId: string): Promise<User | null> {
+    return this.userModel.findOne({ 'keycloakData.keycloakId': keycloakId }).exec();
+  }
+  
+
+  async getUserProfile(userId: string): Promise<User> {
+    const user = await this.userModel
+      .findById(userId)
+      .populate('selectedTeamIds')
+      .exec();
+    if (!user) {
+      throw new Error('User not found');
+    }
+    return user;
+  }
   // async createUser(username: string, email: string, password: string): Promise<any> {
 
   //   interface NotificationPreferences {
@@ -187,6 +202,97 @@ export class UserService {
   //     }
   //   }
   // }
+
+  async updateUserProfile(userId: string, updateData: Partial<User>): Promise<User> {
+    const restrictedFields = ['role', 'membershipStatus', 'keycloakData'];
+    Object.keys(updateData).forEach((key) => {
+      if (restrictedFields.includes(key)) {
+        delete updateData[key];
+      }
+    });
+  
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new Error('User not found');
+    }
+  
+    await this.keycloakAdmin.auth({
+      grantType: 'client_credentials',
+      clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+    });
+  
+    if (updateData.email || updateData.username) {
+      await this.keycloakAdmin.users.update(
+        { id: user.keycloakData.keycloakId },
+        {
+          email: updateData.email,
+          username: updateData.username,
+          emailVerified: true
+        }
+      );
+    }
+  
+    const result = await this.userModel
+      .findByIdAndUpdate(userId, updateData, { new: true })
+      .lean()
+      .exec();
+      
+    if (!result) {
+      throw new Error('Failed to update user');
+    }
+  
+    const updatedUser = result as User;
+  
+    this.kafkaClient.emit('UserProfileUpdated', {
+      userId: userId,
+      updates: updateData
+    });
+  
+    return updatedUser;
+  }
+  
+  
+
+
+  async deleteUser(userId: string, authenticatedUserId: string, isAdmin: boolean): Promise<void> {
+
+    const user = await this.userModel.findById(userId).exec() as UserDocument;
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Authorization check
+    if (user.id !== authenticatedUserId && !isAdmin) {
+      throw new Error('Unauthorized: You can only delete your own account');
+    }
+
+    try {
+      // Authenticate with Keycloak
+      await this.keycloakAdmin.auth({
+        grantType: 'client_credentials',
+        clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+        clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+      });
+
+      // Delete from Keycloak
+      await this.keycloakAdmin.users.del({ id: user.keycloakData.keycloakId });
+
+      // Delete from MongoDB
+      await this.userModel.findByIdAndDelete(userId).exec();
+
+      // Emit deletion event
+      this.kafkaClient.emit('UserDeleted', {
+        userId: userId,
+        deletedBy: authenticatedUserId,
+        isAdminDeletion: isAdmin
+      });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw new Error('Failed to delete user');
+    }
+}
+
 
   
 

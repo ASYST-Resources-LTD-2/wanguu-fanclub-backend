@@ -3,12 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Team, TeamDocument } from './schemas/team.schema';
 import { SportCategory } from 'src/sportCategory/schemas/sport-category.schema';
+import { User } from 'src/user/schemas/user.schema';
 
 @Injectable()
 export class TeamService {
   constructor(
     @InjectModel(Team.name) private teamModel: Model<TeamDocument>,
     @InjectModel(SportCategory.name) private sportCategoryModel: Model<SportCategory>,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   async createTeam(name: string, sportCategoryId: string, location?: string): Promise<Team & { sportCategory: SportCategory }> {
@@ -51,6 +53,39 @@ export class TeamService {
     }
   
     return result;
+  }
+
+  async getTeamById(teamId: string): Promise<Team> {
+    const team = await this.teamModel.findById(teamId).populate('sportCategoryId').exec();
+    if (!team) {
+      throw new Error('Team not found');
+    }
+    return team;
+  }
+
+  async updateTeam(teamId: string, updateData: Partial<Team>): Promise<Team> {
+    const updatedTeam = await this.teamModel
+      .findByIdAndUpdate(teamId, updateData, { new: true })
+      .exec();
+    if (!updatedTeam) {
+      throw new Error('Team not found');
+    }
+    return updatedTeam;
+  }
+
+  async deleteTeam(teamId: string): Promise<void> {
+    // Check if any users have this team in selectedTeamIds
+    const usersWithTeam = await this.userModel
+      .find({ selectedTeamIds: new Types.ObjectId(teamId) })
+      .exec();
+    if (usersWithTeam.length > 0) {
+      throw new Error('Cannot delete team: it is selected by users');
+    }
+
+    const deletedTeam = await this.teamModel.findByIdAndDelete(teamId).exec();
+    if (!deletedTeam) {
+      throw new Error('Team not found');
+    }
   }
 
   async getTeamsBySportCategory(sportCategoryId: string): Promise<Team[]> {
