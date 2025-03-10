@@ -6,13 +6,10 @@ import { User, UserSchema } from './user/schemas/user.schema';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { Partitioners } from 'kafkajs';
 import { SportCategorySchema } from './sportCategory/schemas/sport-category.schema';
-import { SportSchema } from './sport/schemas/sport.schema';
 import { TeamSchema } from './team/schemas/team.schema';
 import { SportCategoryController } from './sportCategory/controller/SportCategoryController';
-import { SportController } from './sport/controller/SportController';
 import { TeamController } from './team/controller/TeamController';
 import { SportCategoryService } from './sportCategory/SportCategoryService';
-import { SportService } from './sport/SportService';
 import { TeamService } from './team/TeamService';
 
 @Module({
@@ -22,7 +19,6 @@ import { TeamService } from './team/TeamService';
       MongooseModule.forFeature([
         {name: User.name,  schema: UserSchema},
         {name: 'SportCategory', schema: SportCategorySchema},
-        {name: 'Sport', schema: SportSchema},
         {name: 'Team', schema: TeamSchema},
       ]),
       ClientsModule.register([
@@ -57,7 +53,7 @@ import { TeamService } from './team/TeamService';
     UserModule,
     KeycloakModule,
   ],
-  controllers: [SportCategoryController,SportController,TeamController],
-  providers: [SportCategoryService,SportService,TeamService],
+  controllers: [SportCategoryController,TeamController],
+  providers: [SportCategoryService,TeamService],
 })
 export class AppModule {}

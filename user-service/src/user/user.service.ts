@@ -4,11 +4,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, set, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
 import { ClientKafka } from '@nestjs/microservices';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import axios from 'axios';
+// import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
 
 interface NotificationPreferences {
   email: boolean;
@@ -22,7 +22,7 @@ export class UserService {
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Membership.name) private membershipModel: Model<MembershipDocument>,
+    // @InjectModel(Membership.name) private membershipModel: Model<MembershipDocument>,
     @Inject('KAFKA_SERVICE') private kafkaClient: ClientKafka,
     private readonly httpService: HttpService,
 ) {
@@ -206,9 +206,11 @@ export class UserService {
     if (selectedTeamIds.length > 0 && !selectedTeamIds.every(isValidObjectId)) {
       throw new Error('Invalid ObjectId in selectedTeamIds');
     }
-    if (typeof notificationPreferences !== 'object' ||
-        typeof notificationPreferences.email !== 'boolean' ||
-        typeof notificationPreferences.sms !== 'boolean') {
+    if (
+      typeof notificationPreferences !== 'object' ||
+      typeof notificationPreferences.email !== 'boolean' ||
+      typeof notificationPreferences.sms !== 'boolean'
+    ) {
       throw new Error('Invalid notificationPreferences structure');
     }
     if (teamId && !isValidObjectId(teamId)) {
@@ -218,12 +220,12 @@ export class UserService {
     if (!validRoles.includes(role)) {
       throw new Error('Invalid role specified');
     }
-
+  
     const maxRetries = 5;
     let attempt = 0;
     let lastError;
     let keycloakUserId: string | null = null;
-
+  
     while (attempt < maxRetries) {
       try {
         // Step 2: Check if user exists in MongoDB
@@ -233,14 +235,14 @@ export class UserService {
         if (existingUser) {
           throw new Error('User already exists in MongoDB');
         }
-
+  
         // Step 3: Authenticate Keycloak admin client
         await this.keycloakAdmin.auth({
           grantType: 'client_credentials',
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
           clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
         });
-
+  
         // Step 4: Check for existing user in Keycloak
         const existingKeycloakUsers = await this.keycloakAdmin.users.find({
           username,
@@ -249,7 +251,7 @@ export class UserService {
         if (existingKeycloakUsers.length > 0) {
           throw new Error('User already exists in Keycloak');
         }
-
+  
         // Step 5: Create the user in Keycloak
         const createdKeycloakUser = await this.keycloakAdmin.users.create({
           username,
@@ -262,7 +264,7 @@ export class UserService {
         if (!keycloakUserId) {
           throw new Error('Failed to create Keycloak user');
         }
-
+  
         // Step 6: Fetch the Keycloak client by clientId
         const client = await this.keycloakAdmin.clients.find({
           clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
@@ -271,7 +273,7 @@ export class UserService {
           throw new Error('Client not found in Keycloak');
         }
         const clientId = client[0].id;
-
+  
         // Step 7: Fetch and assign the appropriate role based on the provided role value.
         const roles = await this.keycloakAdmin.clients.listRoles({ id: clientId });
         let selectedRole;
@@ -295,32 +297,29 @@ export class UserService {
           clientUniqueId: clientId,
           roles: [{ id: selectedRole.id ?? '', name: selectedRole.name ?? '' }],
         });
-
-        // Step 8: Create user in MongoDB with the assigned role
+  
+        // Step 8: Create user in MongoDB with the assigned role (do not create membership record)
         const newUser = new this.userModel({
           username,
           email,
           membershipStatus: 'INACTIVE',
           membershipBadge: 'Basic',
-          selectedSports: selectedSports.length > 0 ? selectedSports.map(id => new Types.ObjectId(id)) : [],
-          selectedTeamIds: selectedTeamIds.length > 0 ? selectedTeamIds.map(id => new Types.ObjectId(id)) : [],
+          selectedSports: selectedSports.length > 0
+            ? selectedSports.map(id => new Types.ObjectId(id))
+            : [],
+          selectedTeamIds: selectedTeamIds.length > 0
+            ? selectedTeamIds.map(id => new Types.ObjectId(id))
+            : [],
           notificationPreferences,
-          role: selectedRole.name, // Save the role (either "USER" or "ADMIN")
+          role: selectedRole.name, // Save the role ("USER" or "ADMIN")
           teamId: teamId ? new Types.ObjectId(teamId) : null,
           keycloakData: {
             keycloakId: keycloakUserId,
           },
         });
         const savedUser = await newUser.save();
-
-        // Step 9: Optionally, create a membership record in MongoDB (here defaulting to FREE)
-        const membership = new this.membershipModel({
-          userId: savedUser._id as Types.ObjectId,
-          membershipType: 'FREE',
-        });
-        await membership.save();
-
-        // Step 10: Emit a Kafka event that a new user was created.
+  
+        // Step 9: Emit a Kafka event that a new user was created.
         this.kafkaClient.emit('UserCreated', {
           username,
           email,
@@ -329,7 +328,7 @@ export class UserService {
           membershipStatus: 'INACTIVE',
           membershipBadge: 'Basic',
         });
-
+  
         return {
           mongoUser: savedUser,
           keycloakUserId,
@@ -337,7 +336,7 @@ export class UserService {
           status: 'success',
           message: 'User created successfully',
         };
-
+  
       } catch (error) {
         lastError = error;
         console.error('Error creating user:', error);
@@ -362,6 +361,7 @@ export class UserService {
       }
     }
   }
+  
   
   
 

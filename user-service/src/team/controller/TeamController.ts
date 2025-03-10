@@ -8,13 +8,14 @@ export class TeamController {
 
   @Post()
   @UseGuards(AuthGuard)
-  @Roles({ roles: ['ADMIN', 'TEAM_GESTIONNAIRE'] }) // Admins and team managers can create teams
-  async createTeam(@Body() body: { name: string; sportId: string; location?: string }) {
-    return this.teamService.createTeam(body.name, body.sportId, body.location);
+  @Roles({ roles: ['ADMIN', 'TEAM_GESTIONNAIRE'] })
+  async createTeam(@Body() body: { name: string; sportCategoryId: string; location?: string }) {
+    return this.teamService.createTeam(body.name, body.sportCategoryId, body.location);
   }
 
-  @Get(':sportId')
-  async getTeamsBySport(@Param('sportId') sportId: string) {
-    return this.teamService.getTeamsBySport(sportId);
+  @Get(':sportCategoryId')
+  @UseGuards(AuthGuard)
+  async getTeamsBySportCategory(@Param('sportCategoryId') sportCategoryId: string) {
+    return this.teamService.getTeamsBySportCategory(sportCategoryId);
   }
 }

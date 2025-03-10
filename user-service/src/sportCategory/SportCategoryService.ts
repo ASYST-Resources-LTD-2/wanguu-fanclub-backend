@@ -15,48 +15,60 @@ export class SportCategoryService {
     description: string,
     parentCategoryId?: string,
   ): Promise<SportCategory> {
-    try {
-      // Check if parent exists (if provided)
-      let parentCategory: SportCategoryDocument | null = null;
-      if (parentCategoryId) {
-        parentCategory = await this.sportCategoryModel.findById(parentCategoryId);
-        if (!parentCategory) {
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
+  
+    while (attempt < maxRetries) {
+      try {
+        // Check if parent exists (if provided)
+        let parentCategory: SportCategoryDocument | null = null;
+        if (parentCategoryId) {
+          parentCategory = await this.sportCategoryModel.findById(parentCategoryId);
+          if (!parentCategory) {
+            throw new HttpException(
+              `Parent category with ID ${parentCategoryId} not found`,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+        }
+  
+        // Check for duplicate name under the same parent
+        const existingCategory = await this.sportCategoryModel.findOne({
+          name,
+          parentCategoryId: parentCategoryId ? new Types.ObjectId(parentCategoryId) : null,
+        });
+        if (existingCategory) {
           throw new HttpException(
-            `Parent category with ID ${parentCategoryId} not found`,
-            HttpStatus.NOT_FOUND,
+            `A category with name "${name}" already exists under the same parent`,
+            HttpStatus.CONFLICT,
           );
         }
+  
+        // Construct the path
+        const path = parentCategory ? `${parentCategory.path}/${name}` : name;
+  
+        // Create and save the new category
+        const newCategory = new this.sportCategoryModel({
+          name,
+          description,
+          parentCategoryId: parentCategoryId ? new Types.ObjectId(parentCategoryId) : null,
+          path,
+        });
+        return await newCategory.save();
+      } catch (error) {
+        lastError = error;
+        attempt++;
+        // Wait for a short period before retrying
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-
-      // Check for duplicate name under the same parent
-      const existingCategory = await this.sportCategoryModel.findOne({
-        name,
-        parentCategoryId: parentCategoryId ? new Types.ObjectId(parentCategoryId) : null,
-      });
-      if (existingCategory) {
-        throw new HttpException(
-          `A category with name "${name}" already exists under the same parent`,
-          HttpStatus.CONFLICT,
-        );
-      }
-
-      // Construct the path
-      const path = parentCategory ? `${parentCategory.path}/${name}` : name;
-
-      // Create and save the new category
-      const newCategory = new this.sportCategoryModel({
-        name,
-        description,
-        parentCategoryId: parentCategoryId ? new Types.ObjectId(parentCategoryId) : null,
-        path,
-      });
-      return await newCategory.save();
-    } catch (error) {
-      throw new HttpException(
-        error.message,
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     }
+  
+    // If all retries fail, throw the last error
+    throw new HttpException(
+      lastError.message,
+      lastError.status || HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 
   // Get all sport categories in a hierarchical structure

@@ -4,15 +4,13 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from './schemas/user.schema';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
-import { Membership, MembershipSchema } from 'src/membership/schemas/membership.schema';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KeycloakModule } from 'src/keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [MongooseModule.forFeature([
-    { name: User.name, schema: UserSchema },
-    {name: Membership.name, schema:MembershipSchema}
+    { name: User.name, schema: UserSchema }
 
   ]),
   HttpModule,

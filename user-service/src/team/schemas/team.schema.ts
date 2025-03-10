@@ -4,15 +4,20 @@ import { Document, Types } from 'mongoose';
 
 export type TeamDocument = Team & Document;
 
-@Schema()
+@Schema({timestamps: true})
 export class Team {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Sport', required: true })
-  sportId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'SportCategory', required: true })
+  sportCategoryId: Types.ObjectId;
+
+  @Prop({ type: String, required: false })
+  location?: string;
+
+
 }
 
 export const TeamSchema = SchemaFactory.createForClass(Team);
 
-TeamSchema.index({ name: 1, sportId: 1 }, { unique: true });
+TeamSchema.index({ name: 1, sportCategoryId: 1 }, { unique: true });
