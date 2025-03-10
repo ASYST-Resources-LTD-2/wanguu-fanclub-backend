@@ -611,37 +611,105 @@ export class UserService {
 // }
 
 
-
 async updateSelectedTeams(userId: string, newSelectedTeamIds: string[]): Promise<any> {
-  // Find the user first
+  if (newSelectedTeamIds.length > 3) {
+    throw new Error('Cannot select more than 3 teams');
+  }
+
   const user = await this.userModel.findById(userId);
   if (!user) {
     throw new Error('User not found');
   }
 
-  // Authenticate Keycloak admin client
+  const teams = await this.teamModel.find({ 
+    _id: { $in: newSelectedTeamIds.map(id => new Types.ObjectId(id)) }
+  });
+  
+  if (teams.length !== newSelectedTeamIds.length) {
+    throw new Error('One or more team IDs are invalid');
+  }
+
+  const uniqueSportCategories = [...new Set(
+    teams.map(team => team.sportCategoryId.toString())
+  )];
+
   await this.keycloakAdmin.auth({
     grantType: 'client_credentials',
     clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
     clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
   });
 
-  // Update the selectedTeamIds
-  user.selectedTeamIds = newSelectedTeamIds.map(id => new Types.ObjectId(id));
-  await user.save();
+  const updates = {
+    selectedTeamIds: newSelectedTeamIds.map(id => new Types.ObjectId(id)),
+    selectedSports: uniqueSportCategories.map(id => new Types.ObjectId(id))
+  };
 
-  // Emit event
+  const updatedUser = await this.userModel.findByIdAndUpdate(
+    userId,
+    { $set: updates },
+    { new: true }
+  );
+
+  if (!updatedUser) {
+    throw new Error('Failed to update user preferences');
+  }
+
   this.kafkaClient.emit('UserTeamsUpdated', {
     userId,
     selectedTeamIds: newSelectedTeamIds,
+    selectedSports: uniqueSportCategories,
+    teamsWithSports: teams.map(team => ({
+      teamId: team._id,
+      sportCategoryId: team.sportCategoryId
+    }))
   });
 
   return {
     status: 'success',
-    message: 'Selected teams updated successfully',
-    selectedTeamIds: user.selectedTeamIds,
+    message: 'Selected teams and sports updated successfully',
+    selectedTeamIds: updatedUser.selectedTeamIds,
+    selectedSports: updatedUser.selectedSports,
+    teamsWithSports: teams.map(team => ({
+      teamId: team._id,
+      sportCategoryId: team.sportCategoryId
+    }))
   };
 }
+
+
+
+
+
+// async updateSelectedTeams(userId: string, newSelectedTeamIds: string[]): Promise<any> {
+//   // Find the user first
+//   const user = await this.userModel.findById(userId);
+//   if (!user) {
+//     throw new Error('User not found');
+//   }
+
+//   // Authenticate Keycloak admin client
+//   await this.keycloakAdmin.auth({
+//     grantType: 'client_credentials',
+//     clientId: process.env.KEYCLOAK_CLIENT_ID || 'fanclub-user-membership',
+//     clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+//   });
+
+//   // Update the selectedTeamIds
+//   user.selectedTeamIds = newSelectedTeamIds.map(id => new Types.ObjectId(id));
+//   await user.save();
+
+//   // Emit event
+//   this.kafkaClient.emit('UserTeamsUpdated', {
+//     userId,
+//     selectedTeamIds: newSelectedTeamIds,
+//   });
+
+//   return {
+//     status: 'success',
+//     message: 'Selected teams updated successfully',
+//     selectedTeamIds: user.selectedTeamIds,
+//   };
+// }
 
 
 
