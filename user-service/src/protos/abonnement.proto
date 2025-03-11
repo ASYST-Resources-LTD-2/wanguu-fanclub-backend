@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package abonnement;
+
+service AbonnementService {
+  rpc GetSubscription (GetSubscriptionRequest) returns (GetSubscriptionResponse);
+  rpc UpgradeSubscription (UpgradeSubscriptionRequest) returns (UpgradeSubscriptionResponse);
+}
+
+message GetSubscriptionRequest {
+  string userId = 1;
+}
+
+message GetSubscriptionResponse {
+  string subscriptionId = 1;
+  string plan = 2;
+  bool isActive = 3;
+}
+
+message UpgradeSubscriptionRequest {
+  string userId = 1;
+  string duration = 2; // "Monthly" or "Yearly"
+  double price = 3;
+}
+
+message UpgradeSubscriptionResponse {
+  string subscriptionId = 1;
+  string plan = 2;
+  string startDate = 3;
+  string endDate = 4;
+}

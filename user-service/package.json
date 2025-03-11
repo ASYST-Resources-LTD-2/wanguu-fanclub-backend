@@ -18,9 +18,14 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    
+  "proto:generate": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./src/protos --grpc_out=./src/protos --plugin=protoc-gen-grpc=`which grpc_tools_node_protoc_plugin` -I ./src/protos ./src/protos/user.proto && protoc --plugin=protoc-gen-ts=./node_modules/.bin/protoc-gen-ts --ts_out=./src/protos -I ./src/protos ./src/protos/user.proto",
+    "copy-protos": "mkdir -p dist/protos && cp -r src/protos/* dist/protos/",
     "start:trace": "node --trace-warnings dist/main.js"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13",
     "@keycloak/keycloak-admin-client": "^26.1.3",
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/axios": "^4.0.0",
@@ -32,6 +37,8 @@
     "axios": "^1.8.1",
     "class-validator": "^0.14.1",
     "dotenv": "^16.4.7",
+    "grpc_tools_node_protoc_ts": "^5.3.3",
+    "grpc-tools": "^1.13.0",
     "ioredis": "^5.6.0",
     "kafkajs": "^2.2.4",
     "keycloak-connect": "^26.1.1",

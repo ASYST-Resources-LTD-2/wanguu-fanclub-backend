@@ -4,9 +4,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, set, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { ClientKafka } from '@nestjs/microservices';
+import { ClientGrpc, ClientKafka, GrpcMethod } from '@nestjs/microservices';
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, lastValueFrom } from 'rxjs';
 import axios from 'axios';
 import { Team } from 'src/team/schemas/team.schema';
 // import { Membership, MembershipDocument } from 'src/membership/schemas/membership.schema';
@@ -15,11 +15,16 @@ interface NotificationPreferences {
   email: boolean;
   sms: boolean;
 }
+interface AbonnementServiceClient {
+  getSubscription(data: { userId: string }): any;
+  upgradeSubscription(data: { userId: string; duration: string; price: number }): any;
+}
 
 
 @Injectable()
 export class UserService {
   private keycloakAdmin: KeycloakAdminClient;
+  private abonnementService: AbonnementServiceClient;
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -27,6 +32,7 @@ export class UserService {
     // @InjectModel(Membership.name) private membershipModel: Model<MembershipDocument>,
     @Inject('KAFKA_SERVICE') private kafkaClient: ClientKafka,
     private readonly httpService: HttpService,
+    @Inject('ABONNEMENT_SERVICE') private readonly clientGrpc: ClientGrpc,
 ) {
     this.keycloakAdmin = new KeycloakAdminClient({
       baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8080',
@@ -40,7 +46,49 @@ export class UserService {
 
   async onModuleInit(){
     await this.kafkaClient.connect();
+    this.abonnementService = this.clientGrpc.getService<AbonnementServiceClient>('AbonnementService');
   }
+
+
+
+  @GrpcMethod('UserService', 'SendMessage')
+  async sendMessage(data: { message: string }): Promise<{ response: string }> {
+    return { response: `Received message: ${data.message}` };
+  }
+
+
+  // Existing methods remain unchanged; add gRPC methods below
+
+  @GrpcMethod('UserService', 'GetUser')
+  async getUser(data: { userId: string }): Promise<{ id: string; username: string; email: string; role: string }> {
+    const user = await this.userModel.findById(data.userId).exec();
+    if (!user) throw new Error('User not found');
+    return { id: user.id, username: user.username, email: user.email, role: user.role };
+  }
+
+  @GrpcMethod('UserService', 'CreateUser')
+  async createUserGrpc(data: { username: string; email: string; password: string }): Promise<{ id: string; username: string; email: string; role: string }> {
+    const result = await this.createUser(data.username, data.email, data.password);
+    return { id: result.mongoUser.id, username: result.mongoUser.username, email: result.mongoUser.email, role: result.mongoUser.role };
+  }
+
+  // Call abonnement service
+  async getUserSubscription(userId: string) {
+    return lastValueFrom(this.abonnementService.getSubscription({ userId }));
+  }
+
+  async upgradeUserSubscription(userId: string, duration: 'Monthly' | 'Yearly', price: number) {
+    return lastValueFrom(this.abonnementService.upgradeSubscription({ userId, duration, price }));
+  }
+  
+
+
+
+
+
+
+
+
   async findUserByKeycloakId(keycloakId: string): Promise<User | null> {
     return this.userModel.findOne({ 'keycloakData.keycloakId': keycloakId }).exec();
   }
@@ -956,6 +1004,51 @@ async upgradeMembership(
     }
   }
 }
+
+
+
+
+
+////////############################///////////////////// Method that uses gRPC 
+
+// async upgradeMembership(userId: string, body: { duration: 'Monthly' | 'Yearly'; price?: number }, token: string) {
+//   const user = await this.userModel.findOne({ 'keycloakData.keycloakId': userId });
+//   if (!user) throw new Error('User not found');
+
+//   const price = body.price || (body.duration === 'Monthly' ? 29.99 : 129.99);
+//   const subscription = await this.upgradeUserSubscription(user._id.toString(), body.duration, price);
+
+//   user.membershipStatus = 'ACTIVE';
+//   user.membershipBadge = 'Premium';
+//   user.role = 'PREMIUM_USER';
+//   user.subscriptionPlan = {
+//     price,
+//     duration: body.duration,
+//     startDate: new Date(subscription.startDate),
+//     endDate: new Date(subscription.endDate),
+//     isActive: true,
+//   };
+//   await user.save();
+
+//   this.kafkaClient.emit('membership-upgraded', {
+//     userId: user._id,
+//     membershipType: 'PREMIUM',
+//     duration: body.duration,
+//   });
+
+//   return {
+//     status: 'success',
+//     message: `Membership upgraded to PREMIUM for ${body.duration}`,
+//     userId: user._id,
+//     keycloakId: userId,
+//     subscriptionPlan: user.subscriptionPlan,
+//   };
+// }
+
+
+
+////////############################///////////////////// Method that uses gRPC 
+
 
 
 

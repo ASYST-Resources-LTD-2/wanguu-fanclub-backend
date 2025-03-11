@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package user;
+
+service UserService {
+  rpc GetUser (GetUserRequest) returns (GetUserResponse);
+  rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+  rpc SendMessage (MessageRequest) returns (MessageResponse);
+}
+
+message GetUserRequest {
+  string userId = 1;
+}
+
+message GetUserResponse {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string role = 4;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message CreateUserResponse {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string role = 4;
+}
+
+// Message definitions
+message MessageRequest {
+  string message = 1;
+}
+
+message MessageResponse {
+  string response = 1;
+}

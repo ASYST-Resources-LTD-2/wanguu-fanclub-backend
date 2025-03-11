@@ -11,6 +11,7 @@ import { SportCategoryController } from './sportCategory/controller/SportCategor
 import { TeamController } from './team/controller/TeamController';
 import { SportCategoryService } from './sportCategory/SportCategoryService';
 import { TeamService } from './team/TeamService';
+import { join } from 'path';
 
 @Module({
   imports: [
@@ -46,9 +47,10 @@ import { TeamService } from './team/TeamService';
             producer: {
               allowAutoTopicCreation: true,
               idempotent: true
-            }
-          }
-        }
+            },
+          },
+        },
+       
       ]),
     UserModule,
     KeycloakModule,

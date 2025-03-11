@@ -8,6 +8,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { KeycloakModule } from 'src/keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 import { Team, TeamSchema } from 'src/team/schemas/team.schema';
+import { join } from 'path';
 
 @Module({
   imports: [MongooseModule.forFeature([
@@ -43,7 +44,16 @@ import { Team, TeamSchema } from 'src/team/schemas/team.schema';
           idempotent: true
         }
       }
-    }
+    },
+     {
+              name: 'ABONNEMENT_SERVICE',
+              transport: Transport.GRPC,
+              options:{
+                package: 'abonnement',
+                protoPath: join(process.cwd(), 'src/protos/abonnement.proto'),
+                url: '192.168.30.108:8045',
+              }
+    },
   ]),
   KeycloakModule,
 ],
