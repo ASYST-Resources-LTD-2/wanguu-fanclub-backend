@@ -69,6 +69,10 @@ interface UpgradeMembershipResponse {
   };
 }
 
+interface PingResponse {
+  message: string;
+}
+
 @Injectable()
 export class GrpcService {
   constructor(
@@ -78,31 +82,37 @@ export class GrpcService {
   ) {}
 
   async getUserProfile(userId: string, context: any): Promise<UserProfileResponse> {
-    const authenticatedUser = context['user'];
-    if (!authenticatedUser || authenticatedUser.sub !== userId) {
-      throw new Error('Unauthorized: You can only access your own profile');
+    try {
+      if (!userId) {
+        throw new BadRequestException('User ID is required');
+      }
+
+      const user = await this.userService.getUserProfile(userId) as UserDocument;
+      
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
+      return {
+        id: user.id.toString(),
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        membershipStatus: user.membershipStatus,
+        membershipBadge: user.membershipBadge,
+        selectedTeamIds: user.selectedTeamIds?.map(id => id.toString()) || [],
+        selectedSports: user.selectedSports?.map(id => id.toString()) || [],
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'User not found');
     }
-    const user = await this.userService.getUserProfile(userId) as UserDocument;
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-    return {
-      id: user.id.toString(),
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      membershipStatus: user.membershipStatus,
-      membershipBadge: user.membershipBadge,
-      selectedTeamIds: user.selectedTeamIds.map(id => id.toString()),
-      selectedSports: user.selectedSports.map(id => id.toString()),
-    };
+  }
+
+  async ping(): Promise<PingResponse> {
+    return { message: 'gRPC service is running' };
   }
 
   async getUserTeams(userId: string, context: any): Promise<UserTeamsResponse> {
-    const authenticatedUser = context['user'];
-    if (!authenticatedUser || authenticatedUser.sub !== userId) {
-      throw new Error('Unauthorized: You can only access your own teams');
-    }
     const user = await this.userService.getUserProfile(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -129,7 +139,7 @@ export class GrpcService {
       data.username,
       data.email,
       data.password,
-      [], // selectedSports is optional
+      [],
       data.selectedTeamIds,
       data.notificationPreferences,
     );
@@ -146,10 +156,6 @@ export class GrpcService {
   }
 
   async upgradeMembership(data: UpgradeMembershipRequest, context: any): Promise<UpgradeMembershipResponse> {
-    const authenticatedUser = context['user'];
-    if (!authenticatedUser || authenticatedUser.sub !== data.userId) {
-      throw new Error('Unauthorized: You can only upgrade your own membership');
-    }
     if (!data.userId || !data.duration) {
       throw new BadRequestException('User ID and duration are required');
     }

@@ -3,6 +3,7 @@ syntax = "proto3";
 package userService;
 
 service UserService {
+  rpc Ping (Empty) returns (PingResponse) {}
   rpc GetUserProfile (UserRequest) returns (UserProfile);
   rpc GetUserTeams (UserRequest) returns (TeamsList);
   rpc GetUserSportCategories (UserRequest) returns (SportCategoriesList);
@@ -91,4 +92,10 @@ message SubscriptionPlan {
   string startDate = 3;
   string endDate = 4;
   bool isActive = 5;
+}
+
+message Empty {}
+
+message PingResponse {
+  string message = 1;
 }

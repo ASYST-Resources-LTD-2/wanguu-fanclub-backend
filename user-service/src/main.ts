@@ -4,9 +4,14 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { join } from 'path';
 import { Logger } from '@nestjs/common';
 
+// const grpcUrl = 'localhost:8085';
+const grpcUrl = '0.0.0.0:8085';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+
+  logger.log(`Using gRPC URL: ${grpcUrl}`);
 
   try {
     app.connectMicroservice<MicroserviceOptions>({
@@ -14,7 +19,7 @@ async function bootstrap() {
       options: {
         package: 'userService',
         protoPath: join(process.cwd(), 'src/protos/user.proto'),
-        url: '0.0.0.0:8085',
+        url: grpcUrl,
       },
     });
 

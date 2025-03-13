@@ -29,18 +29,18 @@ import { GrpcModule } from './gRPC/grpc.module';
       {name: SportCategory.name, schema: SportCategorySchema},
       {name: Team.name, schema: TeamSchema},
     ]),
-    KeycloakConnectModule.registerAsync({
-      useFactory: (configService: ConfigService) => ({
-        authServerUrl: configService.get('KEYCLOAK_URL') || 'http://localhost:8080',
-        realm: configService.get('KEYCLOAK_REALM') || 'FanClubRealm',
-        clientId: configService.get('KEYCLOAK_CLIENT_ID') || 'fanclub-user-membership',
-        secret: configService.get('KEYCLOAK_CLIENT_SECRET') || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
-        cookieKey: 'User JWT',
-        logLevels: ['warn', 'error'],
-        useNestLogger: true,
-      }),
-      inject: [ConfigService],
-    }),
+    // KeycloakConnectModule.registerAsync({
+    //   useFactory: (configService: ConfigService) => ({
+    //     authServerUrl: configService.get('KEYCLOAK_URL') || 'http://localhost:8080',
+    //     realm: configService.get('KEYCLOAK_REALM') || 'FanClubRealm',
+    //     clientId: configService.get('KEYCLOAK_CLIENT_ID') || 'fanclub-user-membership',
+    //     secret: configService.get('KEYCLOAK_CLIENT_SECRET') || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT',
+    //     cookieKey: 'User JWT',
+    //     logLevels: ['warn', 'error'],
+    //     useNestLogger: true,
+    //   }),
+    //   inject: [ConfigService],
+    // }),
     ClientsModule.register([
       {
         name: 'KAFKA_SERVICE',
@@ -81,23 +81,23 @@ import { GrpcModule } from './gRPC/grpc.module';
     SportCategoryService,
     TeamService, 
     GrpcService,
-    {
-      provide: 'KeycloakInstance',
-      useFactory: (configService: ConfigService) => {
-        const Keycloak = require('keycloak-connect');
-        return new Keycloak({}, {
-          realm: configService.get('KEYCLOAK_REALM') || 'FanClubRealm',
-          'auth-server-url': configService.get('KEYCLOAK_URL') || 'http://localhost:8080',
-          'ssl-required': 'external',
-          resource: configService.get('KEYCLOAK_CLIENT_ID') || 'fanclub-user-membership',
-          credentials: {
-            secret: configService.get('KEYCLOAK_CLIENT_SECRET') || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT'
-          },
-          'confidential-port': 0
-        });
-      },
-      inject: [ConfigService]
-    }
+    // {
+    //   provide: 'KeycloakInstance',
+    //   useFactory: (configService: ConfigService) => {
+    //     const Keycloak = require('keycloak-connect');
+    //     return new Keycloak({}, {
+    //       realm: configService.get('KEYCLOAK_REALM') || 'FanClubRealm',
+    //       'auth-server-url': configService.get('KEYCLOAK_URL') || 'http://localhost:8080',
+    //       'ssl-required': 'external',
+    //       resource: configService.get('KEYCLOAK_CLIENT_ID') || 'fanclub-user-membership',
+    //       credentials: {
+    //         secret: configService.get('KEYCLOAK_CLIENT_SECRET') || 'vRLWCtcmwivtUJKGNgECqNrhoy2jCLfT'
+    //       },
+    //       'confidential-port': 0
+    //     });
+    //   },
+    //   inject: [ConfigService]
+    // }
   ],
 })
 export class AppModule {}
