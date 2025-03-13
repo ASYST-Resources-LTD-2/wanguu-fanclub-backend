@@ -5,7 +5,7 @@ import { User, UserSchema } from './schemas/user.schema';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { KeycloakModule } from 'src/keycloak/keycloak.module';
+import { KeycloakModule } from 'src/auth/keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 import { Team, TeamSchema } from 'src/team/schemas/team.schema';
 import { join } from 'path';

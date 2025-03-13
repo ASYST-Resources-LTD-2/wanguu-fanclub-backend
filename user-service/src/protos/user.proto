@@ -1,42 +1,94 @@
 syntax = "proto3";
 
-package user;
+package userService;
 
 service UserService {
-  rpc GetUser (GetUserRequest) returns (GetUserResponse);
-  rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
-  rpc SendMessage (MessageRequest) returns (MessageResponse);
+  rpc GetUserProfile (UserRequest) returns (UserProfile);
+  rpc GetUserTeams (UserRequest) returns (TeamsList);
+  rpc GetUserSportCategories (UserRequest) returns (SportCategoriesList);
+  rpc CreateUser (CreateUserRequest) returns (UserResponse);
+  rpc UpdateUserTeams (UpdateTeamsRequest) returns (UserResponse);
+  rpc UpgradeMembership (UpgradeMembershipRequest) returns (UpgradeMembershipResponse);
 }
 
-message GetUserRequest {
+message UserRequest {
   string userId = 1;
 }
 
-message GetUserResponse {
+message UserProfile {
   string id = 1;
   string username = 2;
   string email = 3;
   string role = 4;
+  string membershipStatus = 5;
+  string membershipBadge = 6;
+  repeated string selectedTeamIds = 7;
+  repeated string selectedSports = 8;
+}
+
+message TeamsList {
+  repeated Team teams = 1;
+}
+
+message Team {
+  string id = 1;
+  string name = 2;
+  string sportCategoryId = 3;
+  string location = 4;
+}
+
+message SportCategoriesList {
+  repeated SportCategory categories = 1;
+}
+
+message SportCategory {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string path = 4;
 }
 
 message CreateUserRequest {
   string username = 1;
   string email = 2;
   string password = 3;
+  repeated string selectedTeamIds = 4;
+  NotificationPreferences notificationPreferences = 5;
 }
 
-message CreateUserResponse {
-  string id = 1;
-  string username = 2;
-  string email = 3;
-  string role = 4;
+message NotificationPreferences {
+  bool email = 1;
+  bool sms = 2;
 }
 
-// Message definitions
-message MessageRequest {
-  string message = 1;
+message UpdateTeamsRequest {
+  string userId = 1;
+  repeated string teamIds = 2;
 }
 
-message MessageResponse {
-  string response = 1;
+message UserResponse {
+  string status = 1;
+  string message = 2;
+  UserProfile user = 3;
+}
+
+message UpgradeMembershipRequest {
+  string userId = 1;
+  string duration = 2;  // Monthly or Yearly
+  double price = 3;
+  string token = 4;
+}
+
+message UpgradeMembershipResponse {
+  string status = 1;
+  string message = 2;
+  SubscriptionPlan subscriptionPlan = 3;
+}
+
+message SubscriptionPlan {
+  double price = 1;
+  string duration = 2;
+  string startDate = 3;
+  string endDate = 4;
+  bool isActive = 5;
 }
