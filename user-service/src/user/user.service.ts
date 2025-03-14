@@ -299,6 +299,22 @@ export class UserService {
   
     return updatedUser;
   }
+
+  async getAllUsers(): Promise<UserDocument[]> {
+    try {
+      const users = await this.userModel
+        .find()
+        .select('-password -keycloakData')
+        .populate('selectedTeamIds')
+        .exec();
+        
+      return users;
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      throw new Error('Failed to fetch users');
+    }
+  }
+  
   
   
 

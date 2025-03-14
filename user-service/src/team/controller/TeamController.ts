@@ -33,6 +33,14 @@ export class TeamController {
     return this.teamService.updateTeam(teamId, updateData);
   }
 
+  @Get()
+@UseGuards(AuthGuard)
+@Roles({ roles: ['USER', 'ADMIN', 'TEAM_GESTIONNAIRE'] })
+async getAllTeams() {
+  return this.teamService.getAllTeams();
+}
+
+
   @Delete(':teamId')
 @UseGuards(AuthGuard)
 @Roles({ roles: ['ADMIN'] })

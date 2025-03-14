@@ -198,6 +198,27 @@ async deleteUser(
     return this.userService.upgradeMembership(userId, body, token);
   }
 
+  // user.controller.ts
+  @Get()
+  @UseGuards(AuthGuard)
+  @Roles({ roles: ['ADMIN'] })
+  async getAllUsers(@Req() request: any) {
+    const token = request.headers.authorization?.split(' ')[1];
+    if (!token) {
+      throw new Error('No authorization token provided');
+    }
+  
+    const decodedToken = this.decodeToken(token);
+    const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+    
+    if (!isAdmin) {
+      throw new Error('Unauthorized: Admin access required');
+    }
+  
+    return this.userService.getAllUsers();
+  }
+  
+
   /**
    * Assign gestionnaire role (admin only)
    */

@@ -8,7 +8,7 @@ import { User } from 'src/user/schemas/user.schema';
 @Injectable()
 export class TeamService {
   constructor(
-    @InjectModel(Team.name) private teamModel: Model<TeamDocument>,
+    @InjectModel(Team.name) public teamModel: Model<TeamDocument>,
     @InjectModel(SportCategory.name) private sportCategoryModel: Model<SportCategory>,
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
@@ -61,6 +61,19 @@ export class TeamService {
       throw new Error('Team not found');
     }
     return team;
+  }
+
+  async getAllTeams(): Promise<Team[]> {
+    const teams = await this.teamModel
+      .find()
+      .populate('sportCategoryId')
+      .exec();
+    
+    if (!teams) {
+      throw new HttpException('No teams found', HttpStatus.NOT_FOUND);
+    }
+    
+    return teams;
   }
 
   async updateTeam(teamId: string, updateData: Partial<Team>): Promise<Team> {

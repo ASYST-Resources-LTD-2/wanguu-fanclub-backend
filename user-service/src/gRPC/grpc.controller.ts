@@ -68,6 +68,27 @@ interface UpgradeMembershipResponse {
 interface PingResponse {
   message: string;
 }
+interface GetAllUsersResponse {
+  users: Array<{
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    membershipStatus: string;
+    membershipBadge: string;
+    selectedTeamIds: string[];
+    selectedSports: string[];
+  }>;
+}
+
+interface TeamsList {
+  teams: Array<{
+    id: string;
+    name: string;
+    sportCategoryId: string;
+    location: string;
+  }>;
+}
 
 @Controller()
 export class GrpcController {
@@ -95,5 +116,15 @@ export class GrpcController {
   @GrpcMethod('UserService', 'Ping')
 async ping() {
   return { message: 'gRPC service is running' };
+}
+
+@GrpcMethod('UserService', 'GetAllUsers')
+async getAllUsers(): Promise<GetAllUsersResponse> {
+  return this.grpcService.getAllUsers();
+}
+
+@GrpcMethod('UserService', 'GetAllTeams')
+async getAllTeams(): Promise<TeamsList> {
+  return this.grpcService.getAllTeams();
 }
 }

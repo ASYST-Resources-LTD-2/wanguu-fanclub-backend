@@ -5,15 +5,20 @@ package userService;
 service UserService {
   rpc Ping (Empty) returns (PingResponse) {}
   rpc GetUserProfile (UserRequest) returns (UserProfile);
-  rpc GetUserTeams (UserRequest) returns (TeamsList);
   rpc GetUserSportCategories (UserRequest) returns (SportCategoriesList);
   rpc CreateUser (CreateUserRequest) returns (UserResponse);
   rpc UpdateUserTeams (UpdateTeamsRequest) returns (UserResponse);
   rpc UpgradeMembership (UpgradeMembershipRequest) returns (UpgradeMembershipResponse);
+  rpc GetAllUsers (Empty) returns (UsersList);
+  rpc GetAllTeams (Empty) returns (TeamsList) {}
 }
 
 message UserRequest {
   string userId = 1;
+}
+
+message UsersList {
+  repeated UserProfile users = 1;
 }
 
 message UserProfile {
@@ -27,16 +32,9 @@ message UserProfile {
   repeated string selectedSports = 8;
 }
 
-message TeamsList {
-  repeated Team teams = 1;
-}
 
-message Team {
-  string id = 1;
-  string name = 2;
-  string sportCategoryId = 3;
-  string location = 4;
-}
+
+
 
 message SportCategoriesList {
   repeated SportCategory categories = 1;
@@ -98,4 +96,14 @@ message Empty {}
 
 message PingResponse {
   string message = 1;
+}
+message TeamsList {
+  repeated Team teams = 1;
+}
+
+message Team {
+  string id = 1;
+  string name = 2;
+  string sportCategoryId = 3;
+  string location = 4;
 }

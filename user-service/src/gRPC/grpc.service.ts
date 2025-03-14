@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { TeamService } from '../team/TeamService';
 import { SportCategoryService } from '../sportCategory/SportCategoryService';
 import { UserDocument } from '../user/schemas/user.schema';
 import { TeamDocument } from '../team/schemas/team.schema';
+
 
 // Define request interfaces (aligned with users.proto)
 interface UserRequest {
@@ -73,6 +74,27 @@ interface PingResponse {
   message: string;
 }
 
+interface GetAllUsersResponse {
+  users: Array<{
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    membershipStatus: string;
+    membershipBadge: string;
+    selectedTeamIds: string[];
+    selectedSports: string[];
+  }>;
+}
+interface TeamsList {
+  teams: Array<{
+    id: string;
+    name: string;
+    sportCategoryId: string;
+    location: string;
+  }>;
+}
+
 @Injectable()
 export class GrpcService {
   constructor(
@@ -80,6 +102,22 @@ export class GrpcService {
     private readonly teamService: TeamService,
     private readonly sportCategoryService: SportCategoryService,
   ) {}
+
+  async getAllUsers(): Promise<GetAllUsersResponse> {
+    const users = await this.userService.getAllUsers();
+    return {
+      users: users.map(user => ({
+        id: user.id.toString(),
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        membershipStatus: user.membershipStatus,
+        membershipBadge: user.membershipBadge,
+        selectedTeamIds: user.selectedTeamIds?.map(id => id.toString()) || [],
+        selectedSports: user.selectedSports?.map(id => id.toString()) || []
+      }))
+    };
+  }
 
   async getUserProfile(userId: string, context: any): Promise<UserProfileResponse> {
     try {
@@ -128,6 +166,17 @@ export class GrpcService {
         sportCategoryId: team.sportCategoryId.toString(),
         location: team.location || '',
       })),
+    };
+  }
+  async getAllTeams(): Promise<TeamsList> {
+    const teams = await this.teamService.getAllTeams() as TeamDocument[];
+    return {
+      teams: teams.map(team => ({
+        id: team.id.toString(),
+        name: team.name,
+        sportCategoryId: team.sportCategoryId.toString(),
+        location: team.location || ''
+      }))
     };
   }
 
