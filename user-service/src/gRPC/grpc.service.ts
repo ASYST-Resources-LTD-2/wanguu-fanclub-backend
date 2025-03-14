@@ -98,6 +98,62 @@ interface TeamsList {
 interface UserExistsResponse {
   exists: boolean;
 }
+interface UpdateUserProfileRequest {
+  userId: string;
+  username?: string;
+  email?: string;
+  notificationPreferences?: { email: boolean; sms: boolean };
+}
+
+interface DeleteUserRequest {
+  userId: string;
+  authenticatedUserId: string;
+  isAdmin: boolean;
+}
+
+interface StatusResponse {
+  status: string;
+  message: string;
+}
+
+interface UpdateSportCategoryRequest {
+  userId: string;
+  sportCategoryIds: string[];
+}
+
+interface SportCategoryRequest {
+  sportCategoryId: string;
+}
+
+interface SportCategoryHierarchyResponse {
+  status: string;
+  hierarchy: any;
+}
+
+interface LinkPaymentRequest {
+  userId: string;
+  paymentId: string;
+  abonnementId: string;
+}
+
+interface AssignRoleRequest {
+  userId: string;
+  teamId: string;
+}
+interface UserResponse {
+  status: string;
+  message: string;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    membershipStatus: string;
+    membershipBadge: string;
+    selectedTeamIds: string[];
+    selectedSports: string[];
+  };
+}
 
 @Injectable()
 export class GrpcService {
@@ -245,4 +301,151 @@ export class GrpcService {
       return false;
     }
   }
+
+  
+
+  async updateUserProfile(data: UpdateUserProfileRequest): Promise<any> {
+    if (!data.userId) {
+      throw new BadRequestException('User ID is required');
+    }
+
+    const updateData: any = {};
+    if (data.username) updateData.username = data.username;
+    if (data.email) updateData.email = data.email;
+    if (data.notificationPreferences) updateData.notificationPreferences = data.notificationPreferences;
+
+    try {
+      const updatedUser = await this.userService.updateUserProfile(data.userId, updateData) as UserDocument;
+      return {
+        status: 'success',
+        message: 'User profile updated successfully',
+        user: {
+          id: updatedUser.id.toString(),
+          username: updatedUser.username,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          membershipStatus: updatedUser.membershipStatus,
+          membershipBadge: updatedUser.membershipBadge,
+          selectedTeamIds: updatedUser.selectedTeamIds?.map(id => id.toString()) || [],
+          selectedSports: updatedUser.selectedSports?.map(id => id.toString()) || [],
+        }
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to update user profile');
+    }
+  }
+
+  async deleteUser(data: DeleteUserRequest): Promise<StatusResponse> {
+    if (!data.userId || !data.authenticatedUserId) {
+      throw new BadRequestException('User ID and authenticated user ID are required');
+    }
+
+    try {
+      await this.userService.deleteUser(data.userId, data.authenticatedUserId, data.isAdmin);
+      return {
+        status: 'success',
+        message: 'User deleted successfully'
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to delete user');
+    }
+  }
+
+  async updateSportCategoryPreferences(data: UpdateSportCategoryRequest): Promise<any> {
+    if (!data.userId || !data.sportCategoryIds) {
+      throw new BadRequestException('User ID and sport category IDs are required');
+    }
+
+    try {
+      const result = await this.userService.updateSportCategoryPreferences(data.userId, data.sportCategoryIds);
+      const user = await this.userService.getUserProfile(data.userId) as UserDocument;
+      
+      return {
+        status: result.status,
+        message: result.message,
+        user: {
+          id: user.id.toString(),
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          membershipStatus: user.membershipStatus,
+          membershipBadge: user.membershipBadge,
+          selectedTeamIds: user.selectedTeamIds?.map(id => id.toString()) || [],
+          selectedSports: user.selectedSports?.map(id => id.toString()) || [],
+        }
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to update sport category preferences');
+    }
+  }
+
+  async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
+    if (!data.sportCategoryId) {
+      throw new BadRequestException('Sport category ID is required');
+    }
+
+    try {
+      const result = await this.userService.getSportCategoryHierarchy(data.sportCategoryId);
+      return {
+        status: result.status,
+        hierarchy: result.hierarchy
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to get sport category hierarchy');
+    }
+  }
+
+  async linkPaymentToUser(data: LinkPaymentRequest): Promise<StatusResponse> {
+    if (!data.userId || !data.paymentId || !data.abonnementId) {
+      throw new BadRequestException('User ID, payment ID, and abonnement ID are required');
+    }
+
+    try {
+      const result = await this.userService.linkPaymentToUser(data.userId, data.paymentId, data.abonnementId);
+      return {
+        status: result.status,
+        message: result.message
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to link payment to user');
+    }
+  }
+
+  async assignGestionnaireRole(data: AssignRoleRequest): Promise<StatusResponse> {
+    if (!data.userId || !data.teamId) {
+      throw new BadRequestException('User ID and team ID are required');
+    }
+
+    try {
+      const result = await this.userService.assignGestionnaireRole(data.userId, data.teamId);
+      return {
+        status: result.status,
+        message: result.message
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to assign gestionnaire role');
+    }
+  }
+
+  async assignAdminRole(data: UserRequest): Promise<StatusResponse> {
+    if (!data.userId) {
+      throw new BadRequestException('User ID is required');
+    }
+
+    try {
+      const result = await this.userService.assignAdminRole(data.userId);
+      return {
+        status: result.status,
+        message: result.message
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message || 'Failed to assign admin role');
+    }
+  }
+
+
+
+
+
+
 }

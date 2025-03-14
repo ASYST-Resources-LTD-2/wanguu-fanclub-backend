@@ -11,7 +11,14 @@ service UserService {
   rpc UpgradeMembership (UpgradeMembershipRequest) returns (UpgradeMembershipResponse);
   rpc GetAllUsers (Empty) returns (UsersList);
   rpc GetAllTeams (Empty) returns (TeamsList) {};
-  rpc CheckUserExists (UserRequest) returns (UserExistsResponse) {}
+  rpc CheckUserExists (UserRequest) returns (UserExistsResponse) {};
+  rpc UpdateUserProfile (UpdateUserProfileRequest) returns (UserResponse);
+  rpc DeleteUser (DeleteUserRequest) returns (StatusResponse);
+  rpc UpdateSportCategoryPreferences (UpdateSportCategoryRequest) returns (UserResponse);
+  rpc GetSportCategoryHierarchy (SportCategoryRequest) returns (SportCategoryHierarchyResponse);
+  rpc LinkPaymentToUser (LinkPaymentRequest) returns (StatusResponse);
+  rpc AssignGestionnaireRole (AssignRoleRequest) returns (StatusResponse);
+  rpc AssignAdminRole (UserRequest) returns (StatusResponse);
 }
 
 message UserRequest {
@@ -111,4 +118,60 @@ message Team {
   string name = 2;
   string sportCategoryId = 3;
   string location = 4;
+}
+
+// message UserExistsResponse {
+//   bool exists = 1;
+// }
+
+// New messages for the added methods
+message UpdateUserProfileRequest {
+  string userId = 1;
+  string username = 2;
+  string email = 3;
+  NotificationPreferences notificationPreferences = 4;
+}
+
+message DeleteUserRequest {
+  string userId = 1;
+  string authenticatedUserId = 2;
+  bool isAdmin = 3;
+}
+
+message StatusResponse {
+  string status = 1;
+  string message = 2;
+}
+
+message UpdateSportCategoryRequest {
+  string userId = 1;
+  repeated string sportCategoryIds = 2;
+}
+
+message SportCategoryRequest {
+  string sportCategoryId = 1;
+}
+
+message SportCategoryHierarchyResponse {
+  string status = 1;
+  SportCategoryHierarchy hierarchy = 2;
+}
+
+message SportCategoryHierarchy {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string path = 4;
+  repeated SportCategoryHierarchy subCategories = 5;
+}
+
+message LinkPaymentRequest {
+  string userId = 1;
+  string paymentId = 2;
+  string abonnementId = 3;
+}
+
+message AssignRoleRequest {
+  string userId = 1;
+  string teamId = 2;
 }

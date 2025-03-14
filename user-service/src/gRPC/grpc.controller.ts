@@ -94,6 +94,63 @@ interface UserExistsResponse {
   exists: boolean;
 }
 
+interface UpdateUserProfileRequest {
+  userId: string;
+  username?: string;
+  email?: string;
+  notificationPreferences?: { email: boolean; sms: boolean };
+}
+
+interface DeleteUserRequest {
+  userId: string;
+  authenticatedUserId: string;
+  isAdmin: boolean;
+}
+
+interface StatusResponse {
+  status: string;
+  message: string;
+}
+
+interface UpdateSportCategoryRequest {
+  userId: string;
+  sportCategoryIds: string[];
+}
+
+interface SportCategoryRequest {
+  sportCategoryId: string;
+}
+
+interface SportCategoryHierarchyResponse {
+  status: string;
+  hierarchy: any;
+}
+
+interface LinkPaymentRequest {
+  userId: string;
+  paymentId: string;
+  abonnementId: string;
+}
+
+interface AssignRoleRequest {
+  userId: string;
+  teamId: string;
+}
+interface UserResponse {
+  status: string;
+  message: string;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    membershipStatus: string;
+    membershipBadge: string;
+    selectedTeamIds: string[];
+    selectedSports: string[];
+  };
+}
+
 @Controller()
 export class GrpcController {
   constructor(private readonly grpcService: GrpcService) {}
@@ -137,4 +194,42 @@ async checkUserExists(data: UserRequest): Promise<UserExistsResponse> {
   const exists = await this.grpcService.checkUserExists(data.userId);
   return { exists };
 }
+
+
+
+  @GrpcMethod('UserService', 'UpdateUserProfile')
+  async updateUserProfile(data: UpdateUserProfileRequest): Promise<UserResponse> {
+    return this.grpcService.updateUserProfile(data);
+  }
+
+  @GrpcMethod('UserService', 'DeleteUser')
+  async deleteUser(data: DeleteUserRequest): Promise<StatusResponse> {
+    return this.grpcService.deleteUser(data);
+  }
+
+  @GrpcMethod('UserService', 'UpdateSportCategoryPreferences')
+  async updateSportCategoryPreferences(data: UpdateSportCategoryRequest): Promise<UserResponse> {
+    return this.grpcService.updateSportCategoryPreferences(data);
+  }
+
+  @GrpcMethod('UserService', 'GetSportCategoryHierarchy')
+  async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
+    return this.grpcService.getSportCategoryHierarchy(data);
+  }
+
+  @GrpcMethod('UserService', 'LinkPaymentToUser')
+  async linkPaymentToUser(data: LinkPaymentRequest): Promise<StatusResponse> {
+    return this.grpcService.linkPaymentToUser(data);
+  }
+
+  @GrpcMethod('UserService', 'AssignGestionnaireRole')
+  async assignGestionnaireRole(data: AssignRoleRequest): Promise<StatusResponse> {
+    return this.grpcService.assignGestionnaireRole(data);
+  }
+
+  @GrpcMethod('UserService', 'AssignAdminRole')
+  async assignAdminRole(data: UserRequest): Promise<StatusResponse> {
+    return this.grpcService.assignAdminRole(data);
+  }
+
 }
