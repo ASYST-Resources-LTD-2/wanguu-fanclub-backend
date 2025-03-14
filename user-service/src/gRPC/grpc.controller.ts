@@ -81,14 +81,7 @@ interface GetAllUsersResponse {
   }>;
 }
 
-interface TeamsList {
-  teams: Array<{
-    id: string;
-    name: string;
-    sportCategoryId: string;
-    location: string;
-  }>;
-}
+
 
 interface UserExistsResponse {
   exists: boolean;
@@ -173,6 +166,20 @@ interface SportCategoryHierarchyResponse {
   };
 }
 
+interface TeamsList {
+  teams: Array<{
+    id: string;
+    name: string;
+    sportCategory: {  // Make sure this is sportCategory, not sportCategoryId
+      id: string;
+      name: string;
+      description: string;
+      path: string;
+    };
+    location: string;
+  }>;
+}
+
 
 @Controller()
 export class GrpcController {
@@ -209,8 +216,33 @@ async getAllUsers(): Promise<GetAllUsersResponse> {
 
 @GrpcMethod('UserService', 'GetAllTeams')
 async getAllTeams(): Promise<TeamsList> {
-  return this.grpcService.getAllTeams();
+  try {
+    const result = await this.grpcService.getAllTeams();
+    
+    // Ensure the response has the correct structure
+    const formattedResponse: TeamsList = {
+      teams: result.teams.map(team => ({
+        id: team.id,
+        name: team.name,
+        sportCategory: {
+          id: team.sportCategory.id,
+          name: team.sportCategory.name,
+          description: team.sportCategory.description,
+          path: team.sportCategory.path
+        },
+        location: team.location
+      }))
+    };
+    
+    console.log('GetAllTeams formatted response:', JSON.stringify(formattedResponse, null, 2));
+    return formattedResponse;
+  } catch (error) {
+    console.error('Error in GetAllTeams controller:', error);
+    throw error;
+  }
 }
+
+
 
 @GrpcMethod('UserService', 'CheckUserExists')
 async checkUserExists(data: UserRequest): Promise<UserExistsResponse> {
@@ -237,10 +269,12 @@ async checkUserExists(data: UserRequest): Promise<UserExistsResponse> {
 
   @GrpcMethod('UserService', 'GetSportCategoryHierarchy')
   @GrpcMethod('UserService', 'GetSportCategoryHierarchy')
-async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
-  return this.grpcService.getSportCategoryHierarchy(data);
-  // Remove the JSON.parse as we're now returning the object directly
-}
+  async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
+    // Log the incoming data to debug
+    console.log('Received sportCategoryId:', data.sportCategoryId);
+    
+    return this.grpcService.getSportCategoryHierarchy(data);
+  }
 
 
   @GrpcMethod('UserService', 'LinkPaymentToUser')

@@ -119,9 +119,13 @@ message TeamsList {
 message Team {
   string id = 1;
   string name = 2;
-  string sportCategoryId = 3;
+  SportCategory sportCategory = 3;  // Changed from string sportCategoryId
   string location = 4;
 }
+
+
+
+
 
 
 

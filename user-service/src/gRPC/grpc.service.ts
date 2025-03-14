@@ -4,6 +4,7 @@ import { TeamService } from '../team/TeamService';
 import { SportCategoryService } from '../sportCategory/SportCategoryService';
 import { UserDocument } from '../user/schemas/user.schema';
 import { TeamDocument } from '../team/schemas/team.schema';
+import { SportCategoryDocument } from 'src/sportCategory/schemas/sport-category.schema';
 
 
 // Define request interfaces (aligned with users.proto)
@@ -90,7 +91,12 @@ interface TeamsList {
   teams: Array<{
     id: string;
     name: string;
-    sportCategoryId: string;
+    sportCategory: {
+      id: string;
+      name: string;
+      description: string;
+      path: string;
+    };
     location: string;
   }>;
 }
@@ -253,16 +259,86 @@ export class GrpcService {
     };
   }
   async getAllTeams(): Promise<TeamsList> {
-    const teams = await this.teamService.getAllTeams() as TeamDocument[];
-    return {
-      teams: teams.map(team => ({
-        id: team.id.toString(),
-        name: team.name,
-        sportCategoryId: team.sportCategoryId.toString(),
-        location: team.location || ''
-      }))
-    };
+    try {
+      const teams = await this.teamService.getAllTeams() as TeamDocument[];
+      
+      const formattedTeams = await Promise.all(
+        teams.map(async team => {
+          // Get the sport category ID as a string
+          const sportCategoryId = team.sportCategoryId.toString();
+          
+          // Try to extract just the ID if it's a complex string
+          let cleanId = sportCategoryId;
+          if (sportCategoryId.includes('ObjectId')) {
+            const match = sportCategoryId.match(/ObjectId\(['"]([0-9a-fA-F]{24})['"]\)/);
+            if (match && match[1]) {
+              cleanId = match[1];
+            }
+          }
+          
+          // Fetch the sport category using the clean ID
+          let sportCategory;
+          try {
+            sportCategory = await this.sportCategoryService.getSportCategoryById(cleanId);
+          } catch (error) {
+            console.log(`Could not fetch sport category with ID ${cleanId}, using fallback`);
+            // If we can't fetch it, try to extract info from the string
+            sportCategory = {
+              _id: cleanId,
+              name: "Unknown",
+              description: "",
+              path: ""
+            };
+            
+            // Try to extract name from string if possible
+            if (typeof sportCategoryId === 'string') {
+              const nameMatch = sportCategoryId.match(/name: ['"]([^'"]+)['"]/);
+              if (nameMatch && nameMatch[1]) {
+                sportCategory.name = nameMatch[1];
+              }
+              
+              const descMatch = sportCategoryId.match(/description: ['"]([^'"]+)['"]/);
+              if (descMatch && descMatch[1]) {
+                sportCategory.description = descMatch[1];
+              }
+              
+              const pathMatch = sportCategoryId.match(/path: ['"]([^'"]+)['"]/);
+              if (pathMatch && pathMatch[1]) {
+                sportCategory.path = pathMatch[1];
+              }
+            }
+          }
+          
+          // Format the team with the sportCategory object
+          return {
+            id: team.id.toString(),
+            name: team.name,
+            sportCategory: {
+              id: sportCategory._id.toString(),
+              name: sportCategory.name || "Unknown",
+              description: sportCategory.description || "",
+              path: sportCategory.path || ""
+            },
+            location: team.location || ''
+          };
+        })
+      );
+      
+      // Log the final response for debugging
+      console.log('getAllTeams service response:', JSON.stringify({ teams: formattedTeams }, null, 2));
+      
+      return { teams: formattedTeams };
+    } catch (error) {
+      console.error('Error in getAllTeams:', error);
+      throw new HttpException(
+        'Failed to retrieve teams',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
+  
+  
+
 
   async createUser(data: CreateUserRequest, context: any): Promise<CreateUserResponse> {
     if (!data.username || !data.email || !data.password) {
@@ -408,14 +484,64 @@ export class GrpcService {
     }
   
     try {
-      const result = await this.userService.getSportCategoryHierarchy(data.sportCategoryId);
-      console.log('Sport category hierarchy result:', JSON.stringify(result, null, 2));
-      return result; // Already matches SportCategoryHierarchyResponse
+      // Extract the actual ObjectId from the string
+      let sportCategoryId: string;
+      
+      // Log the raw input for debugging
+      console.log('Raw sportCategoryId input:', data.sportCategoryId);
+      
+      // Check if it's a stringified object containing an ObjectId
+      if (typeof data.sportCategoryId === 'string' && data.sportCategoryId.includes('ObjectId')) {
+        // Extract the ID using regex - looking for the pattern ObjectId('SOME_ID_HERE')
+        const idMatch = data.sportCategoryId.match(/ObjectId\(['"]([0-9a-fA-F]{24})['"]\)/);
+        if (idMatch && idMatch[1]) {
+          sportCategoryId = idMatch[1];
+          console.log('Extracted ID from ObjectId pattern:', sportCategoryId);
+        } else {
+          // If we can't extract with regex, try another approach
+          try {
+            // Try to clean up the string and parse it as JSON
+            const cleanedStr = data.sportCategoryId
+              .replace(/new ObjectId\(/g, '"')
+              .replace(/\)/g, '"')
+              .replace(/'/g, '"');
+            
+            const parsedObj = JSON.parse(cleanedStr);
+            if (parsedObj._id && typeof parsedObj._id === 'string') {
+              // Extract the ID from the parsed object
+              sportCategoryId = parsedObj._id.replace(/"/g, '');
+              console.log('Extracted ID from parsed object:', sportCategoryId);
+            } else {
+              throw new BadRequestException('Could not extract valid ID from input');
+            }
+          } catch (parseError) {
+            console.error('Error parsing sportCategoryId:', parseError);
+            throw new BadRequestException('Invalid sport category ID format');
+          }
+        }
+      } else {
+        // It's already a proper ID string
+        sportCategoryId = data.sportCategoryId;
+      }
+      
+      // Validate that we have a proper ObjectId string (24 hex characters)
+      if (!/^[0-9a-fA-F]{24}$/.test(sportCategoryId)) {
+        console.error('Invalid ObjectId format:', sportCategoryId);
+        throw new BadRequestException('Invalid ObjectId format');
+      }
+      
+      console.log('Final sportCategoryId to use:', sportCategoryId);
+      
+      const result = await this.userService.getSportCategoryHierarchy(sportCategoryId);
+      return result;
     } catch (error) {
       console.error('Error getting sport category hierarchy:', error);
       throw new NotFoundException(error.message || 'Failed to get sport category hierarchy');
     }
   }
+  
+  
+  
   
   
   
