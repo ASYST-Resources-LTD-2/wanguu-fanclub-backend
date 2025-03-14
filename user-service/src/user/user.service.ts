@@ -405,22 +405,30 @@ export class UserService {
     };
   }
 
+  // async getSportCategoryHierarchy(sportCategoryId: string): Promise<any> {
+  //   const category = await this.sportCategoryModel.findById(sportCategoryId).exec();
+  //   if (!category) throw new Error('Sport category not found');
+  
+  //   const hierarchy = await this.buildSportCategoryHierarchy(category);
+  //   return { status: 'success', hierarchy };
+  // }
+
   async getSportCategoryHierarchy(sportCategoryId: string): Promise<any> {
     const category = await this.sportCategoryModel.findById(sportCategoryId).exec();
     if (!category) throw new Error('Sport category not found');
-
+    
     const hierarchy = await this.buildSportCategoryHierarchy(category);
     return { status: 'success', hierarchy };
   }
 
-  private async buildSportCategoryHierarchy(category: any): Promise<any> {
-    const subCategories = await this.sportCategoryModel.find({ parentCategoryId: category._id }).exec();
-    const result = { ...category.toJSON(), subCategories: [] };
-    for (const sub of subCategories) {
-      result.subCategories.push(await this.buildSportCategoryHierarchy(sub));
-    }
-    return result;
-  }
+  // private async buildSportCategoryHierarchy(category: any): Promise<any> {
+  //   const subCategories = await this.sportCategoryModel.find({ parentCategoryId: category._id }).exec();
+  //   const result = { ...category.toJSON(), subCategories: [] };
+  //   for (const sub of subCategories) {
+  //     result.subCategories.push(await this.buildSportCategoryHierarchy(sub));
+  //   }
+  //   return result;
+  // }
 
   async linkPaymentToUser(userId: string, paymentId: string, abonnementId: string): Promise<any> {
     const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
@@ -497,4 +505,59 @@ export class UserService {
     }
     throw lastError;
   }
+
+  // private async buildSportCategoryHierarchy(category: any): Promise<any> {
+  //   const subCategories = await this.sportCategoryModel.find({ parentCategoryId: category._id }).exec();
+    
+  //   // Convert to a plain JavaScript object to preserve all fields
+  //   const result = category.toObject ? category.toObject() : JSON.parse(JSON.stringify(category));
+    
+  //   // Ensure _id is properly converted to string
+  //   if (result._id) {
+  //     result._id = result._id.toString();
+  //   }
+    
+  //   // Ensure parentCategoryId is properly converted to string if it exists
+  //   if (result.parentCategoryId) {
+  //     result.parentCategoryId = result.parentCategoryId.toString();
+  //   }
+    
+  //   // Initialize subCategories array
+  //   result.subCategories = [];
+    
+  //   // Process each subcategory
+  //   for (const sub of subCategories) {
+  //     result.subCategories.push(await this.buildSportCategoryHierarchy(sub));
+  //   }
+    
+  //   return result;
+  // }
+
+
+
+  private async buildSportCategoryHierarchy(category: any): Promise<any> {
+    const subCategories = await this.sportCategoryModel.find({ parentCategoryId: category._id }).exec();
+    
+    // Convert to a plain JavaScript object
+    const result = category.toObject ? category.toObject() : JSON.parse(JSON.stringify(category));
+    
+    // Ensure all fields are properly typed and converted
+    result.id = result._id.toString();                // Map _id to id for proto
+    delete result._id;                                // Remove original _id
+    result.parentCategoryId = result.parentCategoryId ? result.parentCategoryId.toString() : null;
+    result.createdAt = result.createdAt.toISOString(); // Convert dates to ISO strings
+    result.updatedAt = result.updatedAt.toISOString();
+    result.version = result.__v;                      // Map __v to version
+    delete result.__v;                                // Remove original __v
+    
+    // Recursively build subcategories
+    result.subCategories = await Promise.all(
+      subCategories.map(sub => this.buildSportCategoryHierarchy(sub))
+    );
+    
+    return result;
+  }
+  
+  
+
 }

@@ -121,10 +121,7 @@ interface SportCategoryRequest {
   sportCategoryId: string;
 }
 
-interface SportCategoryHierarchyResponse {
-  status: string;
-  hierarchy: any;
-}
+
 
 interface LinkPaymentRequest {
   userId: string;
@@ -150,6 +147,32 @@ interface UserResponse {
     selectedSports: string[];
   };
 }
+
+interface SportCategoryHierarchyResponse {
+  status: string;
+  hierarchy: {
+    _id: string;
+    name: string;
+    description: string;
+    parentCategoryId: string | null;
+    path: string;
+    createdAt: string;
+    updatedAt: string;
+    __v: number;
+    subCategories: Array<{
+      _id: string;
+      name: string;
+      description: string;
+      parentCategoryId: string;
+      path: string;
+      createdAt: string;
+      updatedAt: string;
+      __v: number;
+      subCategories: Array<any>;
+    }>;
+  };
+}
+
 
 @Controller()
 export class GrpcController {
@@ -213,9 +236,12 @@ async checkUserExists(data: UserRequest): Promise<UserExistsResponse> {
   }
 
   @GrpcMethod('UserService', 'GetSportCategoryHierarchy')
-  async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
-    return this.grpcService.getSportCategoryHierarchy(data);
-  }
+  @GrpcMethod('UserService', 'GetSportCategoryHierarchy')
+async getSportCategoryHierarchy(data: SportCategoryRequest): Promise<SportCategoryHierarchyResponse> {
+  return this.grpcService.getSportCategoryHierarchy(data);
+  // Remove the JSON.parse as we're now returning the object directly
+}
+
 
   @GrpcMethod('UserService', 'LinkPaymentToUser')
   async linkPaymentToUser(data: LinkPaymentRequest): Promise<StatusResponse> {

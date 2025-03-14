@@ -125,10 +125,7 @@ interface SportCategoryRequest {
   sportCategoryId: string;
 }
 
-interface SportCategoryHierarchyResponse {
-  status: string;
-  hierarchy: any;
-}
+
 
 interface LinkPaymentRequest {
   userId: string;
@@ -154,6 +151,32 @@ interface UserResponse {
     selectedSports: string[];
   };
 }
+
+interface SportCategoryHierarchyResponse {
+  status: string;
+  hierarchy: {
+    _id: string;
+    name: string;
+    description: string;
+    parentCategoryId: string | null;
+    path: string;
+    createdAt: string;
+    updatedAt: string;
+    __v: number;
+    subCategories: Array<{
+      _id: string;
+      name: string;
+      description: string;
+      parentCategoryId: string;
+      path: string;
+      createdAt: string;
+      updatedAt: string;
+      __v: number;
+      subCategories: Array<any>;
+    }>;
+  };
+}
+
 
 @Injectable()
 export class GrpcService {
@@ -383,17 +406,19 @@ export class GrpcService {
     if (!data.sportCategoryId) {
       throw new BadRequestException('Sport category ID is required');
     }
-
+  
     try {
       const result = await this.userService.getSportCategoryHierarchy(data.sportCategoryId);
-      return {
-        status: result.status,
-        hierarchy: result.hierarchy
-      };
+      console.log('Sport category hierarchy result:', JSON.stringify(result, null, 2));
+      return result; // Already matches SportCategoryHierarchyResponse
     } catch (error) {
+      console.error('Error getting sport category hierarchy:', error);
       throw new NotFoundException(error.message || 'Failed to get sport category hierarchy');
     }
   }
+  
+  
+  
 
   async linkPaymentToUser(data: LinkPaymentRequest): Promise<StatusResponse> {
     if (!data.userId || !data.paymentId || !data.abonnementId) {

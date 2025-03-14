@@ -1,5 +1,8 @@
 syntax = "proto3";
 
+
+import "google/protobuf/struct.proto";
+
 package userService;
 
 service UserService {
@@ -120,6 +123,8 @@ message Team {
   string location = 4;
 }
 
+
+
 // message UserExistsResponse {
 //   bool exists = 1;
 // }
@@ -161,8 +166,12 @@ message SportCategoryHierarchy {
   string id = 1;
   string name = 2;
   string description = 3;
-  string path = 4;
-  repeated SportCategoryHierarchy subCategories = 5;
+  string parentCategoryId = 4;  // Add this to match MongoDB schema
+  string path = 5;
+  string createdAt = 6;         // Add timestamp fields
+  string updatedAt = 7;
+  int32 version = 8;            // Add __v as version
+  repeated SportCategoryHierarchy subCategories = 9;
 }
 
 message LinkPaymentRequest {
