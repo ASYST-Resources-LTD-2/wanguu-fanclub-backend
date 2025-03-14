@@ -9,11 +9,15 @@ import { KeycloakModule } from 'src/auth/keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 import { Team, TeamSchema } from 'src/team/schemas/team.schema';
 import { join } from 'path';
+import { SportCategory, SportCategorySchema } from 'src/sportCategory/schemas/sport-category.schema';
+import { Abonnement, AbonnementSchema } from 'src/abonnement/schemas/abonnement.schema';
 
 @Module({
   imports: [MongooseModule.forFeature([
     { name: User.name, schema: UserSchema },
-    {name: Team.name, schema: TeamSchema}
+    {name: Team.name, schema: TeamSchema},
+    { name: SportCategory.name, schema: SportCategorySchema },
+    { name: Abonnement.name, schema: AbonnementSchema },
 
   ]),
   HttpModule,

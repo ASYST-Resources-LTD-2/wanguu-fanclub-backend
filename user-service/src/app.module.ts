@@ -18,6 +18,8 @@ import { GrpcService } from './gRPC/grpc.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { KeycloakConnectModule } from 'nest-keycloak-connect';
 import { GrpcModule } from './gRPC/grpc.module';
+import { Paiement, PaiementSchema } from './paiement/schemas/paiement.schema';
+import { Abonnement, AbonnementSchema } from './abonnement/schemas/abonnement.schema';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { GrpcModule } from './gRPC/grpc.module';
       {name: User.name, schema: UserSchema},
       {name: SportCategory.name, schema: SportCategorySchema},
       {name: Team.name, schema: TeamSchema},
+      { name: Paiement.name, schema: PaiementSchema },
+      { name: Abonnement.name, schema: AbonnementSchema },
     ]),
     // KeycloakConnectModule.registerAsync({
     //   useFactory: (configService: ConfigService) => ({
