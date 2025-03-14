@@ -314,6 +314,21 @@ export class UserService {
       throw new Error('Failed to fetch users');
     }
   }
+
+  async checkUserExists(userId: string): Promise<boolean> {
+    try {
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+      
+      const user = await this.userModel.findById(userId).exec();
+      return user !== null;
+    } catch (error) {
+      console.error('Error checking user existence:', error);
+      // If there's an error (like invalid ID format), return false
+      return false;
+    }
+  }
   
   
   

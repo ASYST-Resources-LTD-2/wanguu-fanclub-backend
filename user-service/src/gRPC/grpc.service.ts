@@ -95,6 +95,10 @@ interface TeamsList {
   }>;
 }
 
+interface UserExistsResponse {
+  exists: boolean;
+}
+
 @Injectable()
 export class GrpcService {
   constructor(
@@ -145,6 +149,7 @@ export class GrpcService {
       throw new NotFoundException(error.message || 'User not found');
     }
   }
+
 
   async ping(): Promise<PingResponse> {
     return { message: 'gRPC service is running' };
@@ -224,5 +229,20 @@ export class GrpcService {
         isActive: result.subscriptionPlan.isActive,
       },
     };
+  }
+
+
+  async checkUserExists(userId: string): Promise<boolean> {
+    try {
+      if (!userId) {
+        throw new BadRequestException('User ID is required');
+      }
+      
+      const user = await this.userService.getUserProfile(userId);
+      return user !== null;
+    } catch (error) {
+      // If an error occurs (like user not found), return false
+      return false;
+    }
   }
 }

@@ -10,7 +10,8 @@ service UserService {
   rpc UpdateUserTeams (UpdateTeamsRequest) returns (UserResponse);
   rpc UpgradeMembership (UpgradeMembershipRequest) returns (UpgradeMembershipResponse);
   rpc GetAllUsers (Empty) returns (UsersList);
-  rpc GetAllTeams (Empty) returns (TeamsList) {}
+  rpc GetAllTeams (Empty) returns (TeamsList) {};
+  rpc CheckUserExists (UserRequest) returns (UserExistsResponse) {}
 }
 
 message UserRequest {
@@ -19,6 +20,10 @@ message UserRequest {
 
 message UsersList {
   repeated UserProfile users = 1;
+}
+
+message UserExistsResponse {
+  bool exists = 1;
 }
 
 message UserProfile {

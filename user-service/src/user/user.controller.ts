@@ -217,6 +217,31 @@ async deleteUser(
   
     return this.userService.getAllUsers();
   }
+
+  @Get(':userId/exists')
+@UseGuards(AuthGuard)
+@Roles({ roles: ['USER', 'ADMIN'] })
+async checkUserExists(
+  @Param('userId') userId: string,
+  @Req() request: any
+): Promise<{ exists: boolean }> {
+  const token = request.headers.authorization?.split(' ')[1];
+  if (!token) {
+    throw new Error('No authorization token provided');
+  }
+  
+  const decodedToken = this.decodeToken(token);
+  const authenticatedUserId = decodedToken.sub;
+  
+  // Check authorization - only allow users to check their own existence or admins to check any user
+  const isAdmin = decodedToken.resource_access?.['fanclub-user-membership']?.roles.includes('ADMIN');
+  if (authenticatedUserId !== userId && !isAdmin) {
+    throw new Error('Unauthorized: You can only check your own existence');
+  }
+  
+  const exists = await this.userService.checkUserExists(userId);
+  return { exists };
+}
   
 
   /**

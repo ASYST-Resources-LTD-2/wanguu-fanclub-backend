@@ -90,6 +90,10 @@ interface TeamsList {
   }>;
 }
 
+interface UserExistsResponse {
+  exists: boolean;
+}
+
 @Controller()
 export class GrpcController {
   constructor(private readonly grpcService: GrpcService) {}
@@ -126,5 +130,11 @@ async getAllUsers(): Promise<GetAllUsersResponse> {
 @GrpcMethod('UserService', 'GetAllTeams')
 async getAllTeams(): Promise<TeamsList> {
   return this.grpcService.getAllTeams();
+}
+
+@GrpcMethod('UserService', 'CheckUserExists')
+async checkUserExists(data: UserRequest): Promise<UserExistsResponse> {
+  const exists = await this.grpcService.checkUserExists(data.userId);
+  return { exists };
 }
 }
